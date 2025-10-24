@@ -87,6 +87,7 @@ public class ConceptAprilTagEasy extends LinearOpMode {
         telemetry.addData("DS preview on/off", "3 dots, Camera Stream");
         telemetry.addData(">", "Touch START to start OpMode");
         telemetry.update();
+
         waitForStart();
 
         if (opModeIsActive()) {

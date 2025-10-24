@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.drive.opmode;
+package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.hardware.bosch.BNO055IMU;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
@@ -27,7 +27,7 @@ public class SimpleDrive extends LinearOpMode {
     private BNO055IMU imu1;
     private DigitalChannel blueLED;
     private DigitalChannel redLED;
-    private DcMotor motor2b;
+    //private DcMotor motor2b;
 
 
     float RSX;
@@ -59,26 +59,26 @@ public class SimpleDrive extends LinearOpMode {
         motor1 = hardwareMap.get(DcMotor.class, "motor1");
         motor2 = hardwareMap.get(DcMotor.class, "motor2");
         motor3 = hardwareMap.get(DcMotor.class, "motor3");
-        motor0b = hardwareMap.get(DcMotor.class, "motor0b");
-        motor1b = hardwareMap.get(DcMotor.class, "motor1b");
+        //motor0b = hardwareMap.get(DcMotor.class, "motor0b");
+        //motor1b = hardwareMap.get(DcMotor.class, "motor1b");
         servo0 = hardwareMap.get(Servo.class, "servo0");
         servo1 = hardwareMap.get(CRServo.class, "servo1");
         imu1 = hardwareMap.get(BNO055IMU.class, "imu 1");
-        blueLED = hardwareMap.get(DigitalChannel.class, "blueLED");
-        redLED = hardwareMap.get(DigitalChannel.class, "redLED");
-        motor2b = hardwareMap.get(DcMotor.class, "motor2b");
+        //blueLED = hardwareMap.get(DigitalChannel.class, "blueLED");
+        //redLED = hardwareMap.get(DigitalChannel.class, "redLED");
+        //motor2b = hardwareMap.get(DcMotor.class, "motor2b");
         // Put initialization blocks here.
 
         motor0.setDirection(DcMotor.Direction.FORWARD);
         motor1.setDirection(DcMotor.Direction.REVERSE);
         motor2.setDirection(DcMotor.Direction.REVERSE);
         motor3.setDirection(DcMotor.Direction.FORWARD);
-        motor0b.setDirection(DcMotor.Direction.REVERSE);
-        motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        motor1b.setDirection(DcMotor.Direction.FORWARD);
-        motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        motor2b.setDirection(DcMotorSimple.Direction.REVERSE);
-        motor2b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        //motor0b.setDirection(DcMotor.Direction.REVERSE);
+        //motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        //motor1b.setDirection(DcMotor.Direction.FORWARD);
+        //motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        //motor2b.setDirection(DcMotorSimple.Direction.REVERSE);
+        //motor2b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         motor0.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor0.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         motor1.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
@@ -87,12 +87,12 @@ public class SimpleDrive extends LinearOpMode {
         motor2.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         motor3.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor3.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        motor0b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        motor0b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        motor1b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        motor1b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        //motor0b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        //motor0b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        //motor1b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+//        motor1b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+//        motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+//        motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         servo0.setPosition(0);
         servo1.setDirection(DcMotorSimple.Direction.FORWARD);
         imuParameters = new BNO055IMU.Parameters();
@@ -101,8 +101,8 @@ public class SimpleDrive extends LinearOpMode {
         imuParameters.loggingEnabled = false;
         imu1.initialize(imuParameters);
         YawValue = imu1.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.XYZ, AngleUnit.DEGREES).thirdAngle;
-        blueLED.setMode(DigitalChannel.Mode.OUTPUT);
-        redLED.setMode(DigitalChannel.Mode.OUTPUT);
+        //blueLED.setMode(DigitalChannel.Mode.OUTPUT);
+        //redLED.setMode(DigitalChannel.Mode.OUTPUT);
 
 
         waitForStart();
@@ -116,7 +116,7 @@ public class SimpleDrive extends LinearOpMode {
                 getData();
                 sticks1();
                 buttons();
-                lights();
+                //lights();
 
                 telemetry.update();
             }
@@ -139,8 +139,8 @@ public class SimpleDrive extends LinearOpMode {
         telemetry.addData("powerMotor1", motor1.getPower());
         telemetry.addData("powerMotor2", motor2.getPower());
         telemetry.addData("powerMotor3", motor3.getPower());
-        telemetry.addData("powerMotor0b", motor0b.getPower());
-        telemetry.addData("powerMotor1b", motor1b.getPower());
+        //telemetry.addData("powerMotor0b", motor0b.getPower());
+        //                    telemetry.addData("powerMotor1b", motor1b.getPower());
         telemetry.addData("VelMotor0", ((DcMotorEx) motor0).getVelocity());
         telemetry.addData("VelMotor1", ((DcMotorEx) motor1).getVelocity());
         telemetry.addData("VelMotor2", ((DcMotorEx) motor2).getVelocity());
@@ -152,12 +152,12 @@ public class SimpleDrive extends LinearOpMode {
     private void buttons() {
         // Run motor0b at full power (1) when button A is pressed, stop when released
         if (gamepad2.dpad_up) {
-            motor0b.setPower(1.0); // Move up
+//            motor0b.setPower(1.0); // Move up
         } else if (gamepad2.dpad_down) {
-            motor0b.setPower(-1.0); // Move down
+//            motor0b.setPower(-1.0); // Move down
         } else {
-            motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-            motor0b.setPower(0); // Stop motor
+//            motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+//            motor0b.setPower(0); // Stop motor
         }
 
         telemetry.update();
@@ -166,15 +166,15 @@ public class SimpleDrive extends LinearOpMode {
 
 
         if (gamepad2.dpad_left) {
-            motor1b.setPower(1.0);
-            motor2b.setPower(1.0);
+//            motor1b.setPower(1.0);
+//            motor2b.setPower(1.0);
         } else if (gamepad2.dpad_right) {
-            motor1b.setPower(-1.0);
-            motor2b.setPower(-1.0);
+//            motor1b.setPower(-1.0);
+//            motor2b.setPower(-1.0);
         } else {
-            motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-            motor1b.setPower(0);
-            motor2b.setPower(0);
+//            motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+//            motor1b.setPower(0);
+//            motor2b.setPower(0);
         }
 
             if (gamepad2.right_bumper) {
