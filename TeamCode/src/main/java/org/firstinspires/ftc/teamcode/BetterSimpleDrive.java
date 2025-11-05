@@ -23,7 +23,7 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 
 import java.util.List;
 
-    @TeleOp(name = "SimpleDriveJava_WithTags")
+@TeleOp(name = "BetterSimpleDrivea")
     public class BetterSimpleDrive extends LinearOpMode {
 
         // === Your existing hardware ===
@@ -31,8 +31,12 @@ import java.util.List;
         private DcMotor motor1;
         private DcMotor motor2;
         private DcMotor motor3;
+        private DcMotor motor0b;
+        private DcMotor motor1b;
+        private DcMotor motor2b;
         private Servo servo0;       // gate / artifact stopper
         private CRServo servo1;     // shooter wheel
+        private Servo servo2;
         private BNO055IMU imu1;
         private DigitalChannel blueLED;
         private DigitalChannel redLED;
@@ -70,9 +74,13 @@ import java.util.List;
             motor1 = hardwareMap.get(DcMotor.class, "motor1");
             motor2 = hardwareMap.get(DcMotor.class, "motor2");
             motor3 = hardwareMap.get(DcMotor.class, "motor3");
+            motor0 = hardwareMap.get(DcMotor.class, "motor0b");
+            motor1 = hardwareMap.get(DcMotor.class, "motor1b");
+            motor2 = hardwareMap.get(DcMotor.class, "motor2b");
 
             servo0 = hardwareMap.get(Servo.class, "servo0");
             servo1 = hardwareMap.get(CRServo.class, "servo1");
+            servo0 = hardwareMap.get(Servo.class, "servo2");
             imu1   = hardwareMap.get(BNO055IMU.class, "imu 1");
 
             // If you actually have LEDs, uncomment these:
@@ -147,9 +155,9 @@ import java.util.List;
             aprilTagProcessor = new AprilTagProcessor.Builder().build();
 
             visionPortal = new VisionPortal.Builder()
-                    .setCamera(hardwareMap.get(WebcamName.class, "webcam")) // must match your config name
+                    .setCamera(hardwareMap.get(WebcamName.class, "Webcam 1")) // must match your config name
                     .addProcessor(aprilTagProcessor)
-                    .setCameraResolution(new Size(640, 480))
+                    .setCameraResolution(new Size(1280, 800))
                     .build();
 
             telemetry.addLine("AprilTag vision initialized");
