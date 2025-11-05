@@ -196,11 +196,8 @@ public class SimpleDrive extends LinearOpMode {
         VisionPortal.Builder builder = new VisionPortal.Builder();
 
         // Set the camera (webcam vs. built-in RC phone camera).
-        if (USE_WEBCAM) {
-            builder.setCamera(hardwareMap.get(WebcamName.class, "Webcam 1"));
-        } else {
-            builder.setCamera(BuiltinCameraDirection.BACK);
-        }
+
+        builder.setCamera(hardwareMap.get(WebcamName.class, "Webcam 1"));
 
         // Choose a camera resolution. Not all cameras support all resolutions.
         builder.setCameraResolution(new Size(1280, 800));
