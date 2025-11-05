@@ -46,8 +46,10 @@ public class SimpleDrive extends LinearOpMode {
     private DcMotor motor3;
     private DcMotor motor0b;
     private DcMotor motor1b;
+    private DcMotor motor2b;
     private Servo servo0;
     private CRServo servo1;
+    private Servo servo2;
     private BNO055IMU imu1;
     private DigitalChannel blueLED;
     private DigitalChannel redLED;
@@ -91,12 +93,13 @@ public class SimpleDrive extends LinearOpMode {
         motor3 = hardwareMap.get(DcMotor.class, "motor3");
         motor0b = hardwareMap.get(DcMotor.class, "motor0b");
         motor1b = hardwareMap.get(DcMotor.class, "motor1b");
+        motor2b = hardwareMap.get(DcMotor.class, "motor2b");
         servo0 = hardwareMap.get(Servo.class, "servo0");
         servo1 = hardwareMap.get(CRServo.class, "servo1");
         imu1 = hardwareMap.get(BNO055IMU.class, "imu 1");
         //blueLED = hardwareMap.get(DigitalChannel.class, "blueLED");
         //redLED = hardwareMap.get(DigitalChannel.class, "redLED");
-        //motor2b = hardwareMap.get(DcMotor.class, "motor2b");
+
         // Put initialization blocks here.
 
         motor0.setDirection(DcMotor.Direction.FORWARD);
