@@ -40,6 +40,7 @@ import java.util.List;
         private BNO055IMU imu1;
         private DigitalChannel blueLED;
         private DigitalChannel redLED;
+        private Limelight3A limelight;
 
         // === Your existing drive vars ===
         float RSX;
@@ -126,6 +127,15 @@ import java.util.List;
             telemetry.addLine("Initialized. Press PLAY.");
             telemetry.update();
 
+            /*
+            
+            limelight = hardwareMap.get(Limelight3A.class, "limelight");
+            telemetry.setMsTransmissionInterval(11);
+            limelight.pipelineSwitch(0);
+            limelight.start();
+            
+            */
+
             waitForStart();
 
             // ---------------------
@@ -142,6 +152,29 @@ import java.util.List;
                 if (autoAimEnabled) {
                     detectAndShootWithAprilTags();
                 }
+                
+                /*
+               LLResult result = limelight.getLatestResult();
+                if (result != null && result.isValid()) {
+                    double tx = result.getTx(); // How far left or right the target is (degrees)
+                    double ty = result.getTy(); // How far up or down the target is (degrees)
+                    double ta = result.getTa(); // How big the target looks (0%-100% of the image)
+                    
+                    telemetry.addData("Target X", tx);
+                    telemetry.addData("Target Y", ty);
+                    telemetry.addData("Target Area", ta);
+                    
+                    Pose3D botpose = result.getBotpose();
+                    if (botpose != null) {
+                        double x = botpose.getPosition().x;
+                        double y = botpose.getPosition().y;
+                        telemetry.addData("MT1 Location", "(" + x + ", " + y + ")");
+                    }
+                } else {
+                    telemetry.addData("Limelight", "No Targets");
+                }
+                
+                */
 
                 telemetry.addData("AutoAim", autoAimEnabled ? "ON" : "OFF");
                 telemetry.update();
