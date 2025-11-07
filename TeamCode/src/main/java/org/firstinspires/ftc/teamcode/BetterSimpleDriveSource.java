@@ -65,6 +65,7 @@ public class BetterSimpleDriveSource extends LinearOpMode {
     private boolean isBlueOn = false;
     private boolean wasButtonAPressed = false;
     private boolean wasButtonBPressed = false;
+    private Limelight3A limelight;
 
     /**
      * This function is executed when this Op Mode is selected from the Driver Station.
@@ -72,12 +73,14 @@ public class BetterSimpleDriveSource extends LinearOpMode {
     @Override
     public void runOpMode() {
         initAprilTag();
+        //initLimelight();
 
         // Wait for the DS start button to be touched.
         telemetry.addData("DS preview on/off", "3 dots, Camera Stream");
         telemetry.addData(">", "Touch START to start OpMode");
         telemetry.update();
 
+      
 
         BNO055IMU.Parameters imuParameters;
 
@@ -133,13 +136,9 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         //blueLED.setMode(DigitalChannel.Mode.OUTPUT);
         //redLED.setMode(DigitalChannel.Mode.OUTPUT);
 
-
         waitForStart();
+
         if (opModeIsActive()) {
-
-
-
-
 
             while (opModeIsActive()) {
                 getData();
@@ -152,11 +151,41 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         }
     }
 
+    private void initLimelight() {
+        limelight = hardwareMap.get(Limelight3A.class, "limelight");
+        telemetry.setMsTransmissionInterval(11);
+        limelight.pipelineSwitch(0);
+        limelight.start();
+
+    }   // end method initLimelight()
+
     private void initAprilTag() {
         // Create the AprilTag processor the easy way.
         aprilTag = AprilTagProcessor.easyCreateWithDefaults();
 
     }   // end method initAprilTag()
+
+    private void telemetryLimeLight() {
+        LLResult result = limelight.getLatestResult();
+        if (result != null && result.isValid()) {
+            double tx = result.getTx(); // How far left or right the target is (degrees)
+            double ty = result.getTy(); // How far up or down the target is (degrees)
+            double ta = result.getTa(); // How big the target looks (0%-100% of the image)
+            
+            telemetry.addData("Target X", tx);
+            telemetry.addData("Target Y", ty);
+            telemetry.addData("Target Area", ta);
+            
+            Pose3D botpose = result.getBotpose();
+            if (botpose != null) {
+                double x = botpose.getPosition().x;
+                double y = botpose.getPosition().y;
+                telemetry.addData("MT1 Location", "(" + x + ", " + y + ")");
+            }
+        } else {
+            telemetry.addData("Limelight", "No Targets");
+        }
+    }
 
     private void telemetryAprilTag() {
 
