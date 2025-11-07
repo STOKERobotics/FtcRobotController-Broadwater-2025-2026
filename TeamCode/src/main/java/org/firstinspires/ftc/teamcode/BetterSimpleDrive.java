@@ -123,7 +123,7 @@ import java.util.List;
             // ---------------------
             // NEW: APRILTAG SETUP
             // ---------------------
-            initAprilTag();
+            //initAprilTag();
 
             telemetry.addLine("Initialized. Press PLAY.");
             telemetry.update();
@@ -185,17 +185,6 @@ import java.util.List;
         // =============================================================
         // NEW: initialize the VisionPortal and AprilTag processor
         // =============================================================
-        private void initAprilTag() {
-            aprilTagProcessor = new AprilTagProcessor.Builder().build();
-
-            visionPortal = new VisionPortal.Builder()
-                    .setCamera(hardwareMap.get(WebcamName.class, "Webcam 1")) // must match your config name
-                    .addProcessor(aprilTagProcessor)
-                    .setCameraResolution(new Size(1280, 800))
-                    .build();
-
-            telemetry.addLine("AprilTag vision initialized");
-        }
 
         // =============================================================
         // NEW: detect tag, align, and shoot

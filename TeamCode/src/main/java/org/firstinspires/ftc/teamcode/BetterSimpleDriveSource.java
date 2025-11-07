@@ -75,7 +75,9 @@ public class BetterSimpleDriveSource extends LinearOpMode {
      */
     @Override
     public void runOpMode() {
-        //initAprilTag();
+        //\
+        //
+        // initAprilTag();
         initLimelight();
 
         // Wait for the DS start button to be touched.
@@ -98,6 +100,7 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         motor2b = hardwareMap.get(DcMotor.class, "motor2b");
         servo0 = hardwareMap.get(Servo.class, "servo0");
         servo1 = hardwareMap.get(CRServo.class, "servo1");
+        servo2 = hardwareMap.get(Servo.class, "servo2");
         imu1 = hardwareMap.get(BNO055IMU.class, "imu 1");
         //blueLED = hardwareMap.get(DigitalChannel.class, "blueLED");
         //redLED = hardwareMap.get(DigitalChannel.class, "redLED");
@@ -144,7 +147,7 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         if (opModeIsActive()) {
 
             while (opModeIsActive()) {
-                getData();
+                //getData();
                 sticks1();
                 buttons();
                 telemetryLimeLight();
@@ -170,6 +173,7 @@ public class BetterSimpleDriveSource extends LinearOpMode {
     }   // end method initAprilTag()
 
     private void telemetryLimeLight() {
+        System.out.println("hooray");
         LLResult result = limelight.getLatestResult();
         if (result != null && result.isValid()) {
             double tx = result.getTx(); // How far left or right the target is (degrees)
@@ -185,7 +189,9 @@ public class BetterSimpleDriveSource extends LinearOpMode {
                 double x = botpose.getPosition().x;
                 double y = botpose.getPosition().y;
                 telemetry.addData("MT1 Location", "(" + x + ", " + y + ")");
+                //System.out.printLn("x" + botpose[0])
             }
+
         } else {
             telemetry.addData("Limelight", "No Targets");
         }
@@ -254,18 +260,19 @@ public class BetterSimpleDriveSource extends LinearOpMode {
 
 
         if (gamepad2.dpad_left) {
-//            motor1b.setPower(1.0);
-//            motor2b.setPower(1.0);
+            motor1b.setPower(1.0);
+            motor2b.setPower(1.0);
         } else if (gamepad2.dpad_right) {
-//            motor1b.setPower(-1.0);
-//            motor2b.setPower(-1.0);
+            motor1b.setPower(-1.0);
+            motor2b.setPower(-1.0);
         } else {
-//            motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-//            motor1b.setPower(0);
-//            motor2b.setPower(0);
+            motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+            motor1b.setPower(0);
+            motor2b.setPower(0);
         }
 
             if (gamepad2.right_bumper) {
+                //kicker
                 servo0.setPosition(1);
             }
             else { servo0.setPosition(0); }
