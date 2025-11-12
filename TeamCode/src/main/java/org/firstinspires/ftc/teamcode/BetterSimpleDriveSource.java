@@ -23,7 +23,7 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 import java.util.List;
 
 
-@TeleOp(name = "SimpleDriveJava")
+@TeleOp(name = "BetterSimpleDriveSource")
 public class BetterSimpleDriveSource extends LinearOpMode {
 
     private static final boolean USE_WEBCAM = true;  // true for webcam, false for phone camera
@@ -131,10 +131,10 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         motor1.setDirection(DcMotor.Direction.REVERSE);
         motor2.setDirection(DcMotor.Direction.REVERSE);
         motor3.setDirection(DcMotor.Direction.FORWARD);
-        //motor0b.setDirection(DcMotor.Direction.REVERSE);
-        //motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        //motor1b.setDirection(DcMotor.Direction.FORWARD);
-        //motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        motor0b.setDirection(DcMotor.Direction.REVERSE);
+        motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        motor1b.setDirection(DcMotor.Direction.FORWARD);
+        motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         //motor2b.setDirection(DcMotorSimple.Direction.REVERSE);
         //motor2b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         motor0.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
@@ -145,12 +145,12 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         motor2.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         motor3.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor3.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        //motor0b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        //motor0b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        //motor1b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-//        motor1b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-//        motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-//        motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        motor0b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        motor0b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor1b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        motor1b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         servo0.setPosition(0);
         servo1.setDirection(DcMotorSimple.Direction.FORWARD);
         imuParameters = new BNO055IMU.Parameters();
@@ -167,6 +167,9 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         if (opModeIsActive()) {
 
             while (opModeIsActive()) {
+
+
+
                 telemetryLimeLight();
             
                 // Press A to start auto-align & shoot
@@ -335,8 +338,8 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         telemetry.addData("powerMotor1", motor1.getPower());
         telemetry.addData("powerMotor2", motor2.getPower());
         telemetry.addData("powerMotor3", motor3.getPower());
-        //telemetry.addData("powerMotor0b", motor0b.getPower());
-        //                    telemetry.addData("powerMotor1b", motor1b.getPower());
+        telemetry.addData("powerMotor0b", motor0b.getPower());
+        telemetry.addData("powerMotor1b", motor1b.getPower());
         telemetry.addData("VelMotor0", ((DcMotorEx) motor0).getVelocity());
         telemetry.addData("VelMotor1", ((DcMotorEx) motor1).getVelocity());
         telemetry.addData("VelMotor2", ((DcMotorEx) motor2).getVelocity());
@@ -355,21 +358,22 @@ public class BetterSimpleDriveSource extends LinearOpMode {
 //            motor0b.setPower(0); // Stop motor
         }
 
-        telemetry.update();
 
 
 
 
         if (gamepad2.dpad_left) {
+            motor0b.setPower(1.0);
             motor1b.setPower(1.0);
-            motor2b.setPower(1.0);
         } else if (gamepad2.dpad_right) {
+            motor0b.setPower(-1.0);
             motor1b.setPower(-1.0);
-            motor2b.setPower(-1.0);
         } else {
-            motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
+            motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+            motor0b.setPower(0);
             motor1b.setPower(0);
-            motor2b.setPower(0);
+
         }
 
             if (gamepad2.right_bumper) {
