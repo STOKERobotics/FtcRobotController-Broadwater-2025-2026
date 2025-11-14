@@ -123,7 +123,8 @@ import java.util.List;
             // ---------------------
             // NEW: APRILTAG SETUP
             // ---------------------
-            //initAprilTag();
+            //
+            // initAprilTag();
 
             telemetry.addLine("Initialized. Press PLAY.");
             telemetry.update();

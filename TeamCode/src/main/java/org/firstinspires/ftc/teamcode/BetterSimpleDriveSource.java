@@ -98,7 +98,7 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         //\
         //
         // initAprilTag();
-        initLimelight();
+        //initLimelight();
 
         // Wait for the DS start button to be touched.
         telemetry.addData("DS preview on/off", "3 dots, Camera Stream");
@@ -174,7 +174,7 @@ public class BetterSimpleDriveSource extends LinearOpMode {
             
                 // Press A to start auto-align & shoot
                 if (gamepad1.a && !alignActive) {
-                    alignActive = true;
+                    //alignActive = true;
                 }
             
                 if (alignActive) {
@@ -314,9 +314,9 @@ public class BetterSimpleDriveSource extends LinearOpMode {
             telemetry.addData("Servo2 Angle", "%.2f", servoAngle);
     
             // Kick the ball
-            servo0.setPosition(KICK_EXTEND_POS);
+            servo2.setPosition(KICK_EXTEND_POS);
             sleep(KICK_DURATION_MS);
-            servo0.setPosition(KICK_RETRACT_POS);
+            servo2.setPosition(KICK_RETRACT_POS);
             telemetry.addLine("Ball Fired!");
         } else {
             telemetry.addLine("Shooter: No tag or botpose");
@@ -363,33 +363,32 @@ public class BetterSimpleDriveSource extends LinearOpMode {
 
 
         if (gamepad2.dpad_left) {
-            motor0b.setPower(1.0);
-            motor1b.setPower(1.0);
-        } else if (gamepad2.dpad_right) {
-            motor0b.setPower(-1.0);
-            motor1b.setPower(-1.0);
-        } else {
-
-            motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
             motor0b.setPower(0);
             motor1b.setPower(0);
+        } else {
+            motor0b.setPower(1);
+            motor1b.setPower(1);
 
         }
-
-            if (gamepad2.right_bumper) {
-                //kicker
-                servo0.setPosition(1);
-            }
-            else { servo0.setPosition(0); }
+        if (gamepad2.left_bumper) {
+ //           servo1.setPower(-1.0);   // backwards while held
+        } else {
+//            servo1.setPower(1.0);    // forward when released
+        }
+        if (gamepad2.right_bumper) {
+            servo2.setPosition(1.0);   // backwards while held
+        } else {
+            servo2.setPosition(0.0);    // forward when released
+        }
 
 
 
         if (gamepad2.x) {
-            servo1.setPower(1.0); // Move up
+            //servo1.setPower(1.0); // Move up
         } else if (gamepad2.y) {
-            servo1.setPower(-1.0); // Move down
+            //servo1.setPower(-1.0); // Move down
         } else {
-           servo1.setPower(0); // Stop motor
+           //servo1.setPower(0); // Stop motor
         }
 
     }
