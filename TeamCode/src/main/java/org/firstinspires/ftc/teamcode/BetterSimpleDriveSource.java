@@ -128,8 +128,8 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         // Put initialization blocks here.
 
         motor0.setDirection(DcMotor.Direction.FORWARD);
-        motor1.setDirection(DcMotor.Direction.REVERSE);
-        motor2.setDirection(DcMotor.Direction.REVERSE);
+        motor1.setDirection(DcMotor.Direction.FORWARD);
+        motor2.setDirection(DcMotor.Direction.FORWARD);
         motor3.setDirection(DcMotor.Direction.FORWARD);
         motor0b.setDirection(DcMotor.Direction.REVERSE);
         motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
@@ -149,8 +149,6 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         motor0b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         motor1b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor1b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         servo0.setPosition(0);
         servo1.setDirection(DcMotorSimple.Direction.FORWARD);
         imuParameters = new BNO055IMU.Parameters();
@@ -168,14 +166,14 @@ public class BetterSimpleDriveSource extends LinearOpMode {
 
             while (opModeIsActive()) {
 
+                getData();
 
-
-                telemetryLimeLight();
+                //telemetryLimeLight();
             
                 // Press A to start auto-align & shoot
-                if (gamepad1.a && !alignActive) {
+//                if (gamepad1.a && !alignActive) {
                     //alignActive = true;
-                }
+//                }
             
                 if (alignActive) {
                     boolean aligned = alignToTarget();
@@ -183,7 +181,8 @@ public class BetterSimpleDriveSource extends LinearOpMode {
                         adjustShooterAndFire();  // adjust and kick
                         alignActive = false;     // return to manual mode
                     }
-                } else {
+                }
+                else {
                     sticks1();   // normal drive
                     buttons();   // manual controls
                 }
@@ -208,7 +207,7 @@ public class BetterSimpleDriveSource extends LinearOpMode {
     }   // end method initAprilTag()
 
     private void telemetryLimeLight() {
-        System.out.println("hooray");
+
         LLResult result = limelight.getLatestResult();
         if (result != null && result.isValid()) {
             double tx = result.getTx(); // How far left or right the target is (degrees)
@@ -334,6 +333,7 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         telemetry.addData("Motor 1 Pos", motor1.getCurrentPosition());
         telemetry.addData("motor 2 Pos", motor2.getCurrentPosition());
         telemetry.addData("motor 3 Pos", motor3.getCurrentPosition());
+        telemetry.addData("yaw value", YawValue);
         telemetry.addData("powerMotor0", motor0.getPower());
         telemetry.addData("powerMotor1", motor1.getPower());
         telemetry.addData("powerMotor2", motor2.getPower());
@@ -409,13 +409,14 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         drivePower = gain * LSY;
         rotatePower = gain * RSX;
         sticks4();
+
     }
 
     /**
      * Describe this function...
      */
     private void sticks1() {
-        RSX = gamepad1.right_stick_x;
+        RSX = -gamepad1.right_stick_x;
         LSY = gamepad1.left_stick_y;
         LSX = gamepad1.left_stick_x;
         sticks2();
@@ -425,9 +426,14 @@ public class BetterSimpleDriveSource extends LinearOpMode {
          * Gyro correct values. Code from ChatGTP created code.
          */
         private void sticks4() {
-            YawValue = Math.round(imu1.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.XYZ, AngleUnit.DEGREES).thirdAngle) * (Math.PI / 180);
-            correctedStrafePower = strafePower * Math.cos(YawValue / 180 * Math.PI) - drivePower * Math.sin(YawValue / 180 * Math.PI);
-            correctedDrivePower = drivePower * Math.cos(YawValue / 180 * Math.PI) + strafePower * Math.sin(YawValue / 180 * Math.PI);
+//            YawValue = Math.round(imu1.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.XYZ, AngleUnit.DEGREES).thirdAngle) * (Math.PI / 180);
+//            correctedStrafePower = strafePower * Math.cos(YawValue / 180 * Math.PI) - drivePower * Math.sin(YawValue / 180 * Math.PI);
+//            correctedDrivePower = drivePower * Math.cos(YawValue / 180 * Math.PI) + strafePower * Math.sin(YawValue / 180 * Math.PI);
+//            drive2();
+
+            correctedStrafePower = -strafePower;
+            correctedDrivePower = drivePower;
+
             drive2();
         }
 
@@ -438,7 +444,7 @@ public class BetterSimpleDriveSource extends LinearOpMode {
             // Front right motor
             motor0.setPower((correctedDrivePower - correctedStrafePower) - rotatePower);
             // Front left motor
-            motor2.setPower(correctedDrivePower + correctedStrafePower + rotatePower);
+            motor2.setPower((correctedDrivePower + correctedStrafePower) + rotatePower);
             // Back right motor
             motor3.setPower((correctedDrivePower - correctedStrafePower) + rotatePower);
             // Back left motor
