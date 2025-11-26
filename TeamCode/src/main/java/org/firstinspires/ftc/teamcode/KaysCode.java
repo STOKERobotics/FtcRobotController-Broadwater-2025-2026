@@ -185,6 +185,10 @@ public class KaysCode extends LinearOpMode{
         }
 
 
+
+
+
+
     }
 
     }
@@ -192,3 +196,149 @@ public class KaysCode extends LinearOpMode{
     public void getHeading() {
         return heading;
     }
+        private void alignToAprilTag() {
+
+            while (opModeIsActive()) {
+
+                LLResult result = limelight.getLatestResult();
+
+                // If no tag → keep turning right slowly looking for center
+                if (result == null || !result.isValid()) {
+                    leftFront.setPower(0.15);
+                    leftRear.setPower(0.15);
+                    rightFront.setPower(-0.15);
+                    rightRear.setPower(-0.15);
+                    telemetry.addLine("Tag not found - sweeping right...");
+                    telemetry.update();
+                    continue;
+                }
+
+                double tx = result.getTx();   // horizontal offset
+
+                telemetry.addData("tx", tx);
+                telemetry.update();
+
+                // Alignment tolerance (how perfect you want it)
+                double tolerance = 1.0;  // degrees
+
+                // If centered → stop
+                if (Math.abs(tx) < tolerance) {
+                    stopDrive();
+                    return;
+                }
+
+                // If tag is left → turn right to center it
+                if (tx > 0) {
+                    leftFront.setPower(0.12);
+                    leftRear.setPower(0.12);
+                    rightFront.setPower(-0.12);
+                    rightRear.setPower(-0.12);
+                }
+                // If tag is right → turn left to center it
+                else {
+                    leftFront.setPower(-0.12);
+                    leftRear.setPower(-0.12);
+                    rightFront.setPower(0.12);
+                    rightRear.setPower(0.12);
+                    private void strafeRightGyro(double inches, double power) {
+                        double COUNTS_PER_REV = 537.7;          // adjust for your motor
+                        double WHEEL_DIAMETER = 4.0;            // inches
+                        double COUNTS_PER_INCH = COUNTS_PER_REV / (Math.PI * WHEEL_DIAMETER);
+
+                        int moveCounts = (int)(inches * COUNTS_PER_INCH);
+
+                        // RESET ENCODOERS
+                        leftFront.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+                        leftRear.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+                        rightFront.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+                        rightRear.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+
+                        // STRAFE RIGHT target positions
+                        leftFront.setTargetPosition(+moveCounts);
+                        leftRear.setTargetPosition(-moveCounts);
+                        rightFront.setTargetPosition(-moveCounts);
+                        rightRear.setTargetPosition(+moveCounts);
+
+                        leftFront.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+                        leftRear.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+                        rightFront.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+                        rightRear.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+
+                        double startHeading = getHeading();     // save yaw heading to hold
+
+                        // Start moving
+                        leftFront.setPower(power);
+                        leftRear.setPower(power);
+                        rightFront.setPower(power);
+                        rightRear.setPower(power);
+
+                        while (opModeIsActive() &&
+                                (leftFront.isBusy() || rightFront.isBusy() ||
+                                        leftRear.isBusy()  || rightRear.isBusy())) {
+
+                            // Get current IMU heading
+                            double heading = getHeading();
+                            double error = heading - startHeading;
+                            double kP = 0.03;     // tune if needed
+
+                            double correction = error * kP;
+
+                            // Apply correction to keep straight
+                            leftFront.setPower(power + correction);
+                            leftRear.setPower(power - correction);
+                            rightFront.setPower(power - correction);
+                            rightRear.setPower(power + correction);
+
+                            telemetry.addData("Heading", heading);
+                            telemetry.addData("Correction", correction);
+                            telemetry.update();
+                        }
+
+                        // STOP
+                        leftFront.setPower(0);
+                        leftRear.setPower(0);
+                        rightFront.setPower(0);
+                        rightRear.setPower(0);
+
+                        // Return motors to normal mode
+                        leftFront.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+                        leftRear.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+                        rightFront.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+                        rightRear.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+                        private void turnRightDegrees(double degrees, double power) {
+
+                            double target = getHeading() + degrees;
+
+                            // Wrap target angle into -180 to +180 range
+                            if (target > 180) target -= 360;
+
+                            while (opModeIsActive()) {
+
+                                double heading = getHeading();
+                                double error = target - heading;
+
+                                // Angle wrap (keeps error between -180 and 180)
+                                if (error > 180) error -= 360;
+                                if (error < -180) error += 360;
+
+                                // Stop when close enough
+                                if (Math.abs(error) < 1.0) {
+                                    stopDrive();
+                                    return;
+                                }
+
+                                double turnPower = power;
+
+                                // Turn RIGHT = left side forward, right side backward
+                                leftFront.setPower(+turnPower);
+                                leftRear.setPower(+turnPower);
+                                rightFront.setPower(-turnPower);
+                                rightRear.setPower(-turnPower);
+
+                                telemetry.addData("Heading", heading);
+                                telemetry.addData("Target", target);
+                                telemetry.addData("Error", error);
+                                telemetry.update();
+                            }
+                        }
