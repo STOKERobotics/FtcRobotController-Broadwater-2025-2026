@@ -23,7 +23,7 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 import java.util.List;
 
 
-@TeleOp(name = "SimpleDriveJava")
+@TeleOp(name = "BetterSimpleDriveSource")
 public class BetterSimpleDriveSource extends LinearOpMode {
 
     private static final boolean USE_WEBCAM = true;  // true for webcam, false for phone camera
@@ -98,7 +98,7 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         //\
         //
         // initAprilTag();
-        initLimelight();
+        //initLimelight();
 
         // Wait for the DS start button to be touched.
         telemetry.addData("DS preview on/off", "3 dots, Camera Stream");
@@ -128,13 +128,13 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         // Put initialization blocks here.
 
         motor0.setDirection(DcMotor.Direction.FORWARD);
-        motor1.setDirection(DcMotor.Direction.REVERSE);
-        motor2.setDirection(DcMotor.Direction.REVERSE);
+        motor1.setDirection(DcMotor.Direction.FORWARD);
+        motor2.setDirection(DcMotor.Direction.FORWARD);
         motor3.setDirection(DcMotor.Direction.FORWARD);
-        //motor0b.setDirection(DcMotor.Direction.REVERSE);
-        //motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        //motor1b.setDirection(DcMotor.Direction.FORWARD);
-        //motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        motor0b.setDirection(DcMotor.Direction.REVERSE);
+        motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        motor1b.setDirection(DcMotor.Direction.FORWARD);
+        motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         //motor2b.setDirection(DcMotorSimple.Direction.REVERSE);
         //motor2b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         motor0.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
@@ -145,12 +145,10 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         motor2.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         motor3.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor3.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        //motor0b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        //motor0b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        //motor1b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-//        motor1b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-//        motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-//        motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        motor0b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        motor0b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor1b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        motor1b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         servo0.setPosition(0);
         servo1.setDirection(DcMotorSimple.Direction.FORWARD);
         imuParameters = new BNO055IMU.Parameters();
@@ -167,12 +165,15 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         if (opModeIsActive()) {
 
             while (opModeIsActive()) {
-                telemetryLimeLight();
+
+                getData();
+
+                //telemetryLimeLight();
             
                 // Press A to start auto-align & shoot
-                if (gamepad1.a && !alignActive) {
-                    alignActive = true;
-                }
+//                if (gamepad1.a && !alignActive) {
+                    //alignActive = true;
+//                }
             
                 if (alignActive) {
                     boolean aligned = alignToTarget();
@@ -180,7 +181,8 @@ public class BetterSimpleDriveSource extends LinearOpMode {
                         adjustShooterAndFire();  // adjust and kick
                         alignActive = false;     // return to manual mode
                     }
-                } else {
+                }
+                else {
                     sticks1();   // normal drive
                     buttons();   // manual controls
                 }
@@ -205,7 +207,7 @@ public class BetterSimpleDriveSource extends LinearOpMode {
     }   // end method initAprilTag()
 
     private void telemetryLimeLight() {
-        System.out.println("hooray");
+
         LLResult result = limelight.getLatestResult();
         if (result != null && result.isValid()) {
             double tx = result.getTx(); // How far left or right the target is (degrees)
@@ -311,9 +313,9 @@ public class BetterSimpleDriveSource extends LinearOpMode {
             telemetry.addData("Servo2 Angle", "%.2f", servoAngle);
     
             // Kick the ball
-            servo0.setPosition(KICK_EXTEND_POS);
+            servo2.setPosition(KICK_EXTEND_POS);
             sleep(KICK_DURATION_MS);
-            servo0.setPosition(KICK_RETRACT_POS);
+            servo2.setPosition(KICK_RETRACT_POS);
             telemetry.addLine("Ball Fired!");
         } else {
             telemetry.addLine("Shooter: No tag or botpose");
@@ -331,12 +333,13 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         telemetry.addData("Motor 1 Pos", motor1.getCurrentPosition());
         telemetry.addData("motor 2 Pos", motor2.getCurrentPosition());
         telemetry.addData("motor 3 Pos", motor3.getCurrentPosition());
+        telemetry.addData("yaw value", YawValue);
         telemetry.addData("powerMotor0", motor0.getPower());
         telemetry.addData("powerMotor1", motor1.getPower());
         telemetry.addData("powerMotor2", motor2.getPower());
         telemetry.addData("powerMotor3", motor3.getPower());
-        //telemetry.addData("powerMotor0b", motor0b.getPower());
-        //                    telemetry.addData("powerMotor1b", motor1b.getPower());
+        telemetry.addData("powerMotor0b", motor0b.getPower());
+        telemetry.addData("powerMotor1b", motor1b.getPower());
         telemetry.addData("VelMotor0", ((DcMotorEx) motor0).getVelocity());
         telemetry.addData("VelMotor1", ((DcMotorEx) motor1).getVelocity());
         telemetry.addData("VelMotor2", ((DcMotorEx) motor2).getVelocity());
@@ -355,37 +358,37 @@ public class BetterSimpleDriveSource extends LinearOpMode {
 //            motor0b.setPower(0); // Stop motor
         }
 
-        telemetry.update();
 
 
 
 
         if (gamepad2.dpad_left) {
-            motor1b.setPower(1.0);
-            motor2b.setPower(1.0);
-        } else if (gamepad2.dpad_right) {
-            motor1b.setPower(-1.0);
-            motor2b.setPower(-1.0);
-        } else {
-            motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+            motor0b.setPower(0);
             motor1b.setPower(0);
-            motor2b.setPower(0);
-        }
+        } else {
+            motor0b.setPower(1);
+            motor1b.setPower(1);
 
-            if (gamepad2.right_bumper) {
-                //kicker
-                servo0.setPosition(1);
-            }
-            else { servo0.setPosition(0); }
+        }
+        if (gamepad2.left_bumper) {
+ //           servo1.setPower(-1.0);   // backwards while held
+        } else {
+//            servo1.setPower(1.0);    // forward when released
+        }
+        if (gamepad2.right_bumper) {
+            servo2.setPosition(1.0);   // backwards while held
+        } else {
+            servo2.setPosition(0.0);    // forward when released
+        }
 
 
 
         if (gamepad2.x) {
-            servo1.setPower(1.0); // Move up
+            //servo1.setPower(1.0); // Move up
         } else if (gamepad2.y) {
-            servo1.setPower(-1.0); // Move down
+            //servo1.setPower(-1.0); // Move down
         } else {
-           servo1.setPower(0); // Stop motor
+           //servo1.setPower(0); // Stop motor
         }
 
     }
@@ -406,13 +409,14 @@ public class BetterSimpleDriveSource extends LinearOpMode {
         drivePower = gain * LSY;
         rotatePower = gain * RSX;
         sticks4();
+
     }
 
     /**
      * Describe this function...
      */
     private void sticks1() {
-        RSX = gamepad1.right_stick_x;
+        RSX = -gamepad1.right_stick_x;
         LSY = gamepad1.left_stick_y;
         LSX = gamepad1.left_stick_x;
         sticks2();
@@ -422,9 +426,14 @@ public class BetterSimpleDriveSource extends LinearOpMode {
          * Gyro correct values. Code from ChatGTP created code.
          */
         private void sticks4() {
-            YawValue = Math.round(imu1.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.XYZ, AngleUnit.DEGREES).thirdAngle) * (Math.PI / 180);
-            correctedStrafePower = strafePower * Math.cos(YawValue / 180 * Math.PI) - drivePower * Math.sin(YawValue / 180 * Math.PI);
-            correctedDrivePower = drivePower * Math.cos(YawValue / 180 * Math.PI) + strafePower * Math.sin(YawValue / 180 * Math.PI);
+//            YawValue = Math.round(imu1.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.XYZ, AngleUnit.DEGREES).thirdAngle) * (Math.PI / 180);
+//            correctedStrafePower = strafePower * Math.cos(YawValue / 180 * Math.PI) - drivePower * Math.sin(YawValue / 180 * Math.PI);
+//            correctedDrivePower = drivePower * Math.cos(YawValue / 180 * Math.PI) + strafePower * Math.sin(YawValue / 180 * Math.PI);
+//            drive2();
+
+            correctedStrafePower = -strafePower;
+            correctedDrivePower = drivePower;
+
             drive2();
         }
 
@@ -435,7 +444,7 @@ public class BetterSimpleDriveSource extends LinearOpMode {
             // Front right motor
             motor0.setPower((correctedDrivePower - correctedStrafePower) - rotatePower);
             // Front left motor
-            motor2.setPower(correctedDrivePower + correctedStrafePower + rotatePower);
+            motor2.setPower((correctedDrivePower + correctedStrafePower) + rotatePower);
             // Back right motor
             motor3.setPower((correctedDrivePower - correctedStrafePower) + rotatePower);
             // Back left motor
