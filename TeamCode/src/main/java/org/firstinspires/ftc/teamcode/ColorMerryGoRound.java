@@ -6,6 +6,7 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.ColorSensor;
+import com.qualcomm.robotcore.hardware.DcMotor;
 
 import java.util.List;
 
@@ -13,7 +14,7 @@ import java.util.List;
 public class IntakeColorsWithLimelight extends LinearOpMode {
 
     // Hardware
-    private CRServo intake;
+    private DcMotor motor2b;
     private ColorSensor colorSensor;
     private Limelight3A limelight;
 
@@ -135,9 +136,7 @@ public class IntakeColorsWithLimelight extends LinearOpMode {
             case 2:
                 return "GPP";
             case 3:
-                return "PGG";
-            case 4:
-                return "GGG";
+                return "PPG";
             default:
                 return null;
         }
