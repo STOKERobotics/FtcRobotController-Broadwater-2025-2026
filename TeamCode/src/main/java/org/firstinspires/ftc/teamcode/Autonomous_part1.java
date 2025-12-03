@@ -24,7 +24,7 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 import java.util.List;
 
 
-@Autonomous(name = "USE_THIS_ONE_BetterSimpleDrive")
+@Autonomous(name = "Autonomous 1")
 public class Autonomous_part1 extends LinearOpMode {
 
     private static final boolean USE_WEBCAM = true;  // true for webcam, false for phone camera
