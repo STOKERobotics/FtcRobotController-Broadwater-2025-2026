@@ -18,7 +18,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
 import org.firstinspires.ftc.vision.VisionPortal;
 import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 
-@Autonomous(name = "KaysCode")
+//@Autonomous(name = "KaysCode")
 public class KaysCode extends LinearOpMode{
     private static final boolean USE_WEBCAM = true;
     private AprilTagProcessor aprilTag;
