@@ -12,6 +12,7 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.DigitalChannel;
 import com.qualcomm.robotcore.hardware.Servo;
 
+import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
@@ -23,7 +24,7 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 import java.util.List;
 
 
-@TeleOp(name = "USE_THIS_ONE_BetterSimpleDrive")
+@TeleOp(name = "USE THIS ONE BetterSimpleDrive")
 public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
 
     private static final boolean USE_WEBCAM = true;  // true for webcam, false for phone camera
@@ -58,17 +59,17 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     private static final double ALIGN_TOLERANCE = 1.0;   // deg
     private static final double ALIGN_MAX_POWER = 0.3;
     private boolean alignActive = false;
-    
+
     // Shooter control constants
     private static final double SHOOTER_BASE_POWER = 0.5;
     private static final double SHOOTER_MAX_POWER  = 1.0;
     private static final double SHOOTER_MIN_DIST   = 20.0;  // inches
     private static final double SHOOTER_MAX_DIST   = 70.0;  // inches
-    
+
     // Servo angle limits
     private static final double SERVO_MIN_ANGLE = 0.25;
     private static final double SERVO_MAX_ANGLE = 0.85;
-    
+
     // Firing servo timing
     private static final double KICK_EXTEND_POS = 1.0;
     private static final double KICK_RETRACT_POS = 0.0;
@@ -105,7 +106,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         telemetry.addData(">", "Touch START to start OpMode");
         telemetry.update();
 
-      
+
 
         BNO055IMU.Parameters imuParameters;
 
@@ -167,14 +168,12 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
             while (opModeIsActive()) {
 
                 getData();
-
                 telemetryLimeLight();
-            
                 // Press A to start auto-align & shoot
                 if (gamepad1.a && !alignActive) {
                     alignActive = true;
                 }
-            
+
                 if (alignActive) {
                     boolean aligned = alignToTarget();
                     if (aligned) {
@@ -186,7 +185,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
                     sticks1();   // normal drive
                     buttons();   // manual controls
                 }
-            
+
                 telemetry.update();
             }
         }
@@ -213,11 +212,13 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
             double tx = result.getTx(); // How far left or right the target is (degrees)
             double ty = result.getTy(); // How far up or down the target is (degrees)
             double ta = result.getTa(); // How big the target looks (0%-100% of the image)
-            
+
+
             telemetry.addData("Target X", tx);
             telemetry.addData("Target Y", ty);
             telemetry.addData("Target Area", ta);
-            
+
+
             Pose3D botpose = result.getBotpose();
             if (botpose != null) {
                 double x = botpose.getPosition().x;
@@ -260,22 +261,22 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         LLResult result = limelight.getLatestResult();
         if (result != null && result.isValid()) {
             double tx = result.getTx();  // horizontal offset
-    
+
             if (Math.abs(tx) <= ALIGN_TOLERANCE) {
                 stopDrive();
                 telemetry.addData("Alignment", "Aligned!");
                 return true;
             }
-    
+
             double turnPower = Math.max(-ALIGN_MAX_POWER,
                     Math.min(ALIGN_MAX_POWER, tx * ALIGN_KP));
-    
+
             // Rotate robot
             motor0.setPower(-turnPower);
             motor1.setPower(turnPower);
             motor2.setPower(turnPower);
             motor3.setPower(-turnPower);
-    
+
             telemetry.addData("Aligning", "tx=%.2f  power=%.2f", tx, turnPower);
             return false;
         } else {
@@ -287,31 +288,31 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     private void adjustShooterAndFire() {
         LLResult result = limelight.getLatestResult();
         if (result != null && result.isValid() && result.getBotpose() != null) {
-    
+
             Pose3D botpose = result.getBotpose();
             double distanceMeters = Math.sqrt(
                     botpose.getPosition().x * botpose.getPosition().x +
                     botpose.getPosition().y * botpose.getPosition().y);
             double distanceInches = distanceMeters * 39.37;
-    
+
             // Normalize to 0–1 range
             double normalized = Math.max(0, Math.min(1,
                     (distanceInches - SHOOTER_MIN_DIST) /
                     (SHOOTER_MAX_DIST - SHOOTER_MIN_DIST)));
-    
+
             double shooterPower = SHOOTER_BASE_POWER +
                     (SHOOTER_MAX_POWER - SHOOTER_BASE_POWER) * normalized;
             double servoAngle = SERVO_MAX_ANGLE -
                     (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) * normalized;
-    
+
             motor0b.setPower(shooterPower);
             motor1b.setPower(shooterPower);
             servo2.setPosition(servoAngle);
-    
+
             telemetry.addData("Tag Dist (in)", "%.1f", distanceInches);
             telemetry.addData("Shooter Power", "%.2f", shooterPower);
             telemetry.addData("Servo2 Angle", "%.2f", servoAngle);
-    
+
             // Kick the ball
             servo2.setPosition(KICK_EXTEND_POS);
             sleep(KICK_DURATION_MS);
@@ -344,7 +345,9 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         telemetry.addData("VelMotor1", ((DcMotorEx) motor1).getVelocity());
         telemetry.addData("VelMotor2", ((DcMotorEx) motor2).getVelocity());
         telemetry.addData("VelMotor3", ((DcMotorEx) motor3).getVelocity());
+        telemetryLimeLight();
         telemetry.update();
+
     }
 
     private void buttons() {

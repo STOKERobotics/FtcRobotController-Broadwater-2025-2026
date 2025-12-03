@@ -5,6 +5,7 @@ import android.util.Size;
 
 import com.qualcomm.hardware.bosch.BNO055IMU;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.CRServo;
@@ -24,7 +25,8 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 
 import java.util.List;
 
-@TeleOp(name = "BetterSimpleDrivea")
+@TeleOp(name = "BetterSimpleDrive")
+@Disabled
     public class BetterSimpleDrive extends LinearOpMode {
 
         // === Your existing hardware ===
