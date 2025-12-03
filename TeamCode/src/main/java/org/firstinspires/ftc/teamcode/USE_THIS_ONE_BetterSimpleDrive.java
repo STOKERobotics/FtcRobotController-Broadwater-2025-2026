@@ -23,8 +23,8 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 import java.util.List;
 
 
-@TeleOp(name = "BetterSimpleDriveSource")
-public class BetterSimpleDriveSource extends LinearOpMode {
+@TeleOp(name = "USE_THIS_ONE_BetterSimpleDrive")
+public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
 
     private static final boolean USE_WEBCAM = true;  // true for webcam, false for phone camera
 
@@ -97,8 +97,8 @@ public class BetterSimpleDriveSource extends LinearOpMode {
     public void runOpMode() {
         //\
         //
-        // initAprilTag();
-        //initLimelight();
+        initAprilTag();
+        initLimelight();
 
         // Wait for the DS start button to be touched.
         telemetry.addData("DS preview on/off", "3 dots, Camera Stream");
@@ -168,12 +168,12 @@ public class BetterSimpleDriveSource extends LinearOpMode {
 
                 getData();
 
-                //telemetryLimeLight();
+                telemetryLimeLight();
             
                 // Press A to start auto-align & shoot
-//                if (gamepad1.a && !alignActive) {
-                    //alignActive = true;
-//                }
+                if (gamepad1.a && !alignActive) {
+                    alignActive = true;
+                }
             
                 if (alignActive) {
                     boolean aligned = alignToTarget();
@@ -223,7 +223,7 @@ public class BetterSimpleDriveSource extends LinearOpMode {
                 double x = botpose.getPosition().x;
                 double y = botpose.getPosition().y;
                 telemetry.addData("MT1 Location", "(" + x + ", " + y + ")");
-                //System.out.printLn("x" + botpose[0])
+                //System.out.printLn("x" + botpose[0]);
             }
 
         } else {
