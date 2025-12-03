@@ -7,10 +7,8 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.ColorSensor;
 
-import java.util.List;
-
 @Autonomous(name = "IntakeColorsWithLimelight")
-public class IntakeColorsWithLimelight extends LinearOpMode {
+public class ColorMerryGoRound extends LinearOpMode {
 
     // Hardware
     private CRServo intake;
@@ -66,7 +64,7 @@ public class IntakeColorsWithLimelight extends LinearOpMode {
                     && result.getFiducialResults() != null
                     && !result.getFiducialResults().isEmpty()) {
 
-                int tagID = result.getFiducialResults().get(0).getId();
+                int tagID = result.getFiducialResults().get(0).getFiducialId();
                 String order = getColorOrderFromTag(tagID);
 
                 telemetry.addData("AprilTag ID", tagID);
