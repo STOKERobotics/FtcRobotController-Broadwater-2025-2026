@@ -24,7 +24,7 @@ public class ColorMerryGoRound extends LinearOpMode {
     public void runOpMode() {
 
         // ---- Hardware Map ----
-        intake = hardwareMap.get(CRServo.class, "intake2b");
+        motor2b = hardwareMap.get(DcMotor.class, "motor2b");
         colorSensor = hardwareMap.get(ColorSensor.class, "color");
         limelight = hardwareMap.get(Limelight3A.class, "limelight");
 
@@ -40,9 +40,9 @@ public class ColorMerryGoRound extends LinearOpMode {
         while (opModeIsActive() && spotIndex < 3) {
 
             // Run intake
-            intake.setPower(1.0);
+            motor2b.setPower(1.0);
             sleep(700);
-            intake.setPower(0);
+            motor2b.setPower(0);
 
             // Detect and store color
             spots[spotIndex] = detectColor10Percent();
