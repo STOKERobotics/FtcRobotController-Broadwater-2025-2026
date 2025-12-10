@@ -195,6 +195,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
                 telemetry.update();
             }
         }
+
     }
 
     private void initLimelight() {
@@ -276,7 +277,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
 
             double turnPower = Math.max(-ALIGN_MAX_POWER,
                     Math.min(ALIGN_MAX_POWER, tx * ALIGN_KP));
-            LSY = (float) turnPower;
+            LSX = (float) turnPower;
             sticks2();
             // Rotate robot
 //            motor0.setPower(-turnPower);
