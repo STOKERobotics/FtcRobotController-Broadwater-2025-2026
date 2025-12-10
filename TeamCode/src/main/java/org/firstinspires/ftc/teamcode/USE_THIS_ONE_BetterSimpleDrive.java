@@ -173,15 +173,16 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
                 if (gamepad1.a && !alignActive) {
                     alignActive = true;
                 }
-                if (gamepad1.a && alignActive) {
-                    alignActive = false;
-                }
+
 
                 if (alignActive) {
                     boolean aligned = alignToTarget();
                     if (aligned) {
                         adjustShooterAndFire();  // adjust and kick
                         alignActive = false;     // return to manual mode
+                    } else if (gamepad1.b && alignActive) {
+                        alignActive = false;
+
                     }
                 }
                 else {
@@ -275,12 +276,13 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
 
             double turnPower = Math.max(-ALIGN_MAX_POWER,
                     Math.min(ALIGN_MAX_POWER, tx * ALIGN_KP));
-
+            LSY = (float) turnPower;
+            sticks2();
             // Rotate robot
-            motor0.setPower(-turnPower);
-            motor1.setPower(turnPower);
-            motor2.setPower(turnPower);
-            motor3.setPower(-turnPower);
+//            motor0.setPower(-turnPower);
+//            motor1.setPower(turnPower);
+//            motor2.setPower(turnPower);
+//            motor3.setPower(-turnPower);
 
             telemetry.addData("Aligning", "tx=%.2f  power=%.2f", tx, turnPower);
             return false;
