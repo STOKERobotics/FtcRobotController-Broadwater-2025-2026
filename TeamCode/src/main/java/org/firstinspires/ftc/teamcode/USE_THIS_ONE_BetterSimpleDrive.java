@@ -98,7 +98,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     public void runOpMode() {
         //\
         //
-        initAprilTag();
+        //initAprilTag();
         initLimelight();
 
         // Wait for the DS start button to be touched.
@@ -136,8 +136,8 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         motor1b.setDirection(DcMotor.Direction.FORWARD);
         motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        //motor2b.setDirection(DcMotorSimple.Direction.REVERSE);
-        //motor2b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        motor2b.setDirection(DcMotorSimple.Direction.FORWARD);
+        motor2b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         motor0.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor0.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         motor1.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
@@ -173,6 +173,9 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
                 if (gamepad1.a && !alignActive) {
                     alignActive = true;
                 }
+                if (gamepad1.a && alignActive) {
+                    alignActive = false;
+                }
 
                 if (alignActive) {
                     boolean aligned = alignToTarget();
@@ -182,7 +185,9 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
                     }
                 }
                 else {
-                    sticks1();   // normal drive
+                    sticks1();
+                    sticks2();
+                    sticks4();// normal drive
                     buttons();   // manual controls
                 }
 
