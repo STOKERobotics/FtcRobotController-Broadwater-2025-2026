@@ -154,5 +154,6 @@ public class ConceptVisionColorSensor extends LinearOpMode
 
             sleep(20);
         }
+        return 0;
     }
 }

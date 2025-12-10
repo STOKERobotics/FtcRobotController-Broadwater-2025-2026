@@ -67,6 +67,7 @@ public class ConceptGamepadEdgeDetection extends LinearOpMode {
             // Wait 2 seconds before doing another check
             sleep(2000);
         }
+        return 0;
     }
 
     public void telemetryButtonData() {

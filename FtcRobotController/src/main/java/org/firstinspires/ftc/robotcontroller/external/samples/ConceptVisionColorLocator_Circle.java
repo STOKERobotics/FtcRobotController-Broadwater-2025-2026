@@ -241,5 +241,6 @@ public class ConceptVisionColorLocator_Circle extends LinearOpMode {
             telemetry.update();
             sleep(100); // Match the telemetry update interval.
         }
+        return 0;
     }
 }

@@ -215,6 +215,7 @@ public class SensorOctoQuadLocalization extends LinearOpMode
             // Send updated telemetry to the Driver Station
             telemetry.update();
         }
+        return 0;
     }
 
     long lastWarnFlashTimeMs = 0;

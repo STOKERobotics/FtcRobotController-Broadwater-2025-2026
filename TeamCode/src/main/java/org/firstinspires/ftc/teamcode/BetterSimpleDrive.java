@@ -183,6 +183,7 @@ import java.util.List;
                 telemetry.addData("AutoAim", autoAimEnabled ? "ON" : "OFF");
                 telemetry.update();
             }
+            return 0;
         }
 
         // =============================================================

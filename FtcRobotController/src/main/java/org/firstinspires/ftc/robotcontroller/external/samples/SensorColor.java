@@ -110,6 +110,7 @@ public class SensorColor extends LinearOpMode {
         }
       });
       }
+      return 0;
   }
 
   protected void runSample() {

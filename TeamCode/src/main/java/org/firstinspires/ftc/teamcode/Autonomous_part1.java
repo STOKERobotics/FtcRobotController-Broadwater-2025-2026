@@ -191,6 +191,7 @@ public class Autonomous_part1 extends LinearOpMode {
                 telemetry.update();
             }
         }
+        return 0;
     }
 
     private void initLimelight() {
