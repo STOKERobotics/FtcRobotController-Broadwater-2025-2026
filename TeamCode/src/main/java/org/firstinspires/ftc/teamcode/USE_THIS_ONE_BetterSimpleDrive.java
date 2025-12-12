@@ -12,16 +12,11 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.DigitalChannel;
 import com.qualcomm.robotcore.hardware.Servo;
 
-import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 import org.firstinspires.ftc.vision.VisionPortal;
-import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
-import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
-
-import java.util.List;
 
 
 @TeleOp(name = "USE THIS ONE BetterSimpleDrive")
@@ -32,7 +27,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     /**
      * The variable to store our instance of the AprilTag processor.
      */
-    private AprilTagProcessor aprilTag;
+
 
     /**
      * The variable to store our instance of the vision portal.
@@ -203,14 +198,10 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         telemetry.setMsTransmissionInterval(11);
         limelight.pipelineSwitch(0);
         limelight.start();
+        telemetryLimeLight();
 
     }   // end method initLimelight()
 
-    private void initAprilTag() {
-        // Create the AprilTag processor the easy way.
-        aprilTag = AprilTagProcessor.easyCreateWithDefaults();
-
-    }   // end method initAprilTag()
 
     private void telemetryLimeLight() {
 
@@ -220,7 +211,8 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
             double ty = result.getTy(); // How far up or down the target is (degrees)
             double ta = result.getTa(); // How big the target looks (0%-100% of the image)
 
-
+            double distance = getDistanceFromTag(result.getTa());
+            telemetry.addData("distance", distance);
             telemetry.addData("Target X", tx);
             telemetry.addData("Target Y", ty);
             telemetry.addData("Target Area", ta);
@@ -239,30 +231,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         }
     }
 
-    private void telemetryAprilTag() {
 
-        List<AprilTagDetection> currentDetections = aprilTag.getDetections();
-        telemetry.addData("# AprilTags Detected", currentDetections.size());
-
-        // Step through the list of detections and display info for each one.
-        for (AprilTagDetection detection : currentDetections) {
-            if (detection.metadata != null) {
-                telemetry.addLine(String.format("\n==== (ID %d) %s", detection.id, detection.metadata.name));
-                telemetry.addLine(String.format("XYZ %6.1f %6.1f %6.1f  (inch)", detection.ftcPose.x, detection.ftcPose.y, detection.ftcPose.z));
-                telemetry.addLine(String.format("PRY %6.1f %6.1f %6.1f  (deg)", detection.ftcPose.pitch, detection.ftcPose.roll, detection.ftcPose.yaw));
-                telemetry.addLine(String.format("RBE %6.1f %6.1f %6.1f  (inch, deg, deg)", detection.ftcPose.range, detection.ftcPose.bearing, detection.ftcPose.elevation));
-            } else {
-                telemetry.addLine(String.format("\n==== (ID %d) Unknown", detection.id));
-                telemetry.addLine(String.format("Center %6.0f %6.0f   (pixels)", detection.center.x, detection.center.y));
-            }
-        }   // end for() loop
-
-        // Add "key" information to telemetry
-        telemetry.addLine("\nkey:\nXYZ = X (Right), Y (Forward), Z (Up) dist.");
-        telemetry.addLine("PRY = Pitch, Roll & Yaw (XYZ Rotation)");
-        telemetry.addLine("RBE = Range, Bearing & Elevation");
-
-    }   //
 
     private boolean alignToTarget() {
         LLResult result = limelight.getLatestResult();
@@ -336,13 +305,17 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         motor2.setPower(0);
         motor3.setPower(0);
     }
-
+    public double getDistanceFromTag(double ta){
+        double scale = Math.pow(38392.11 , -2);
+        double distance;
+        distance = (scale / ta);
+        return distance;
+    }
     private void getData() {
         telemetry.addData("Motor 0 Pos", motor0.getCurrentPosition());
         telemetry.addData("Motor 1 Pos", motor1.getCurrentPosition());
         telemetry.addData("motor 2 Pos", motor2.getCurrentPosition());
         telemetry.addData("motor 3 Pos", motor3.getCurrentPosition());
-        telemetry.addData("yaw value", YawValue);
         telemetry.addData("powerMotor0", motor0.getPower());
         telemetry.addData("powerMotor1", motor1.getPower());
         telemetry.addData("powerMotor2", motor2.getPower());
