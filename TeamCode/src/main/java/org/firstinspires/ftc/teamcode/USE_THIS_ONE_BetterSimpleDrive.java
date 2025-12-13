@@ -211,7 +211,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
             double ty = result.getTy(); // How far up or down the target is (degrees)
             double ta = result.getTa(); // How big the target looks (0%-100% of the image)
 
-            double distance = getDistanceFromTag(result.getTa());
+            double distance = getDistanceFromTag(result.getBotpose());
             telemetry.addData("distance", distance);
             telemetry.addData("Target X", tx);
             telemetry.addData("Target Y", ty);
@@ -305,11 +305,15 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         motor2.setPower(0);
         motor3.setPower(0);
     }
-    public double getDistanceFromTag(double ta){
-        double scale = Math.pow(38392.11 , -2);
-        double distance;
-        distance = (scale / ta);
-        return distance;
+    public double getDistanceFromTag(Pose3D botpose){
+        if (botpose == null) return -1; // or Double.NaN
+    
+        // Planar distance = sqrt(x^2 + z^2)  (meters)
+        double x = botpose.getPosition().x;
+        double z = botpose.getPosition().z;
+    
+        double distanceMeters = Math.sqrt(x * x + z * z);
+        return distanceMeters * 39.37; // return inches (to match your shooter constants)
     }
     private void getData() {
         telemetry.addData("Motor 0 Pos", motor0.getCurrentPosition());
