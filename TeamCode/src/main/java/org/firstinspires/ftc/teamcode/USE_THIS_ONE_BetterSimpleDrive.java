@@ -204,31 +204,30 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
 
 
     private void telemetryLimeLight() {
-
         LLResult result = limelight.getLatestResult();
-        if (result != null && result.isValid()) {
-            double tx = result.getTx(); // How far left or right the target is (degrees)
-            double ty = result.getTy(); // How far up or down the target is (degrees)
-            double ta = result.getTa(); // How big the target looks (0%-100% of the image)
 
-            double distance = getDistanceFromTag(result.getBotpose());
-            telemetry.addData("distance", distance);
-            telemetry.addData("Target X", tx);
-            telemetry.addData("Target Y", ty);
-            telemetry.addData("Target Area", ta);
-
-
-            Pose3D botpose = result.getBotpose();
-            if (botpose != null) {
-                double x = botpose.getPosition().x;
-                double y = botpose.getPosition().y;
-                telemetry.addData("MT1 Location", "(" + x + ", " + y + ")");
-                //System.out.printLn("x" + botpose[0]);
-            }
-
-        } else {
-            telemetry.addData("Limelight", "No Targets");
+        if (result == null) {
+            telemetry.addLine("LLResult = null");
+            return;
         }
+
+        telemetry.addData("LL Valid", result.isValid());
+        telemetry.addData("tx", "%.2f", result.getTx());
+        telemetry.addData("ty", "%.2f", result.getTy());
+        telemetry.addData("ta", "%.2f", result.getTa());
+
+        Pose3D botpose = result.getBotpose();
+        if (botpose == null) {
+            telemetry.addLine("botpose = null (localization not producing pose)");
+            return;
+        }
+
+        double x = botpose.getPosition().x;
+        double y = botpose.getPosition().y;
+        double z = botpose.getPosition().z;
+
+        telemetry.addData("Botpose x,y,z (m)", "(%.3f, %.3f, %.3f)", x, y, z);
+        telemetry.addData("Dist from origin (in)", "%.1f", Math.sqrt(x*x + y*y) * 39.37);
     }
 
 
