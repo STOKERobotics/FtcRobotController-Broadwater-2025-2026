@@ -305,12 +305,12 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         motor2.setPower(0);
         motor3.setPower(0);
     }
-    public double getDistanceFromTag(Pose3D botpose){
-        if (botpose == null) return -1; // or Double.NaN
+    public double getDistanceFromTag(Pose3D pose){
+        if (pose == null) return -1; // or Double.NaN
     
         // Planar distance = sqrt(x^2 + z^2)  (meters)
-        double x = botpose.getPosition().x;
-        double z = botpose.getPosition().z;
+        double x = pose.getPosition().x;
+        double z = pose.getPosition().z;
     
         double distanceMeters = Math.sqrt(x * x + z * z);
         return distanceMeters * 39.37; // return inches (to match your shooter constants)
