@@ -13,6 +13,11 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.DigitalChannel;
 import com.qualcomm.robotcore.hardware.Servo;
 
+import com.qualcomm.robotcore.hardware.ColorSensor;
+import com.qualcomm.robotcore.hardware.NormalizedColorSensor;
+import com.qualcomm.robotcore.hardware.NormalizedRGBA;
+import android.graphics.Color;
+
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
@@ -70,8 +75,11 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     private static final double KICK_EXTEND_POS = 1.0;
     private static final double KICK_RETRACT_POS = 0.0;
     private static final long   KICK_DURATION_MS = 350;  // how long to stay extended
-
-
+    
+    private NormalizedColorSensor ballColor;
+    private boolean ballIsGreen = false;
+    private boolean ballIsPurple = false;
+    
     float RSX;
     double YawValue;
     float LSY;
@@ -119,6 +127,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         servo1 = hardwareMap.get(CRServo.class, "servo1");
         servo2 = hardwareMap.get(Servo.class, "servo2");
         imu1 = hardwareMap.get(BNO055IMU.class, "imu 1");
+        ballColor = hardwareMap.get(NormalizedColorSensor.class, "ballColor"); // match config name
         //blueLED = hardwareMap.get(DigitalChannel.class, "blueLED");
         //redLED = hardwareMap.get(DigitalChannel.class, "redLED");
 
@@ -187,7 +196,8 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
                     sticks4();// normal drive
                     buttons();   // manual controls
                 }
-
+                updateBallColor();
+                telemetryBallColor();
                 telemetry.update();
             }
         }
@@ -344,6 +354,15 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
 
     }
 
+    private void telemetryBallColor() {
+        NormalizedRGBA c = ballColor.getNormalizedColors();
+        float[] hsv = new float[3];
+        Color.RGBToHSV((int)(c.red*255), (int)(c.green*255), (int)(c.blue*255), hsv);
+    
+        telemetry.addData("BallHue", "%.0f", hsv[0]);
+        telemetry.addData("Ball", ballIsGreen ? "GREEN" : (ballIsPurple ? "PURPLE" : "UNKNOWN"));
+    }
+
     private Pose3D getBestTagPoseCameraSpace(LLResult result) {
         if (result == null || !result.isValid()) return null;
     
@@ -367,6 +386,33 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     
         double horizontalMeters = Math.sqrt(x * x + z * z);
         return horizontalMeters * 39.37;
+    }
+
+    private void updateBallColor() {
+        NormalizedRGBA c = ballColor.getNormalizedColors();
+    
+        float[] hsv = new float[3];
+        Color.RGBToHSV(
+                (int)(c.red   * 255),
+                (int)(c.green * 255),
+                (int)(c.blue  * 255),
+                hsv
+        );
+    
+        float hue = hsv[0];        // 0..360
+        float sat = hsv[1];        // 0..1
+        float val = hsv[2];        // 0..1
+    
+        // Basic “is there actually a colored ball here?” gate
+        boolean confident = (sat > 0.35) && (val > 0.10);
+    
+        // Starting ranges (you WILL tune these with telemetry)
+        // Green is usually ~90–150 hue, Purple is usually ~250–310 hue
+        ballIsGreen  = confident && (hue >= 90 && hue <= 150);
+        ballIsPurple = confident && (hue >= 250 && hue <= 310);
+    
+        // If lighting makes purple wrap weirdly, you can broaden:
+        // ballIsPurple = confident && ((hue >= 240 && hue <= 320));
     }
 
     private void buttons() {
