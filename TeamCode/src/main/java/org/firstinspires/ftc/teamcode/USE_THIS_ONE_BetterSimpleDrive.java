@@ -3,6 +3,7 @@ package org.firstinspires.ftc.teamcode;
 import com.qualcomm.hardware.bosch.BNO055IMU;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
+import com.qualcomm.hardware.limelightvision.LLResultTypes;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.CRServo;
@@ -210,7 +211,16 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
             telemetry.addLine("LLResult = null");
             return;
         }
-
+        Pose3D targetCam = getBestTagPoseCameraSpace(result);
+        if (targetCam != null) {
+            telemetry.addData("TagCam x z (m)", "%.2f %.2f",
+                    targetCam.getPosition().x,
+                    targetCam.getPosition().z);
+            telemetry.addData("TagDist (in)", "%.1f",
+                    getWallTagDistanceInchesFromCameraPose(targetCam));
+        } else {
+            telemetry.addLine("TagCam: none");
+        }
         telemetry.addData("LL Valid", result.isValid());
         telemetry.addData("tx", "%.2f", result.getTx());
         telemetry.addData("ty", "%.2f", result.getTy());
@@ -332,6 +342,31 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         telemetryLimeLight();
         telemetry.update();
 
+    }
+
+    private Pose3D getBestTagPoseCameraSpace(LLResult result) {
+        if (result == null || !result.isValid()) return null;
+    
+        java.util.List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
+        if (tags == null || tags.isEmpty()) return null;
+    
+        // Pick the "best" tag: easiest heuristic = largest target area
+        LLResultTypes.FiducialResult best = tags.get(0);
+        for (LLResultTypes.FiducialResult t : tags) {
+            if (t.getTargetArea() > best.getTargetArea()) best = t;
+        }
+    
+        return best.getTargetPoseCameraSpace(); // <-- this is the key
+    }
+
+    private double getWallTagDistanceInchesFromCameraPose(Pose3D targetCamPose) {
+        if (targetCamPose == null) return -1;
+    
+        double x = targetCamPose.getPosition().x;  // left/right (m)
+        double z = targetCamPose.getPosition().z;  // forward/out (m)
+    
+        double horizontalMeters = Math.sqrt(x * x + z * z);
+        return horizontalMeters * 39.37;
     }
 
     private void buttons() {
