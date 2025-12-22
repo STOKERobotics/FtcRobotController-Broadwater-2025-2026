@@ -30,17 +30,7 @@ import org.firstinspires.ftc.vision.VisionPortal;
 @TeleOp(name = "USE THIS ONE BetterSimpleDrive")
 public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
 
-    private static final boolean USE_WEBCAM = true;  // true for webcam, false for phone camera
 
-    /**
-     * The variable to store our instance of the AprilTag processor.
-     */
-
-
-    /**
-     * The variable to store our instance of the vision portal.
-     */
-    private VisionPortal visionPortal;
 
 
     private DcMotor motor0;
