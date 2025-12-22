@@ -44,7 +44,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
 
 
     private DcMotor motor0;
-    private DcMotor motor1;`
+    private DcMotor motor1;
     private DcMotor motor2;
     private DcMotor motor3;
     private DcMotor motor0b;
@@ -123,7 +123,6 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         servo2 = hardwareMap.get(Servo.class, "servo2");
         imu1 = hardwareMap.get(BNO055IMU.class, "imu 1");
         ballColor = hardwareMap.get(NormalizedColorSensor.class, "ballColor"); // match config name
-        dist = hardwareMap.get(NormalizedColorSensor.class, "ballColor"); // match config name
         //blueLED = hardwareMap.get(DigitalChannel.class, "blueLED");
         //redLED = hardwareMap.get(DigitalChannel.class, "redLED");
 
