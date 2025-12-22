@@ -16,6 +16,8 @@ import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.ColorSensor;
 import com.qualcomm.robotcore.hardware.NormalizedColorSensor;
 import com.qualcomm.robotcore.hardware.NormalizedRGBA;
+import com.qualcomm.robotcore.hardware.SwitchableLight;
+
 import android.graphics.Color;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
@@ -42,7 +44,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
 
 
     private DcMotor motor0;
-    private DcMotor motor1;
+    private DcMotor motor1;`
     private DcMotor motor2;
     private DcMotor motor3;
     private DcMotor motor0b;
@@ -54,7 +56,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     private BNO055IMU imu1;
     private DigitalChannel blueLED;
     private DigitalChannel redLED;
-    //private DcMotor motor2b;
+
     // Limelight alignment control
     private static final double ALIGN_KP = 0.03;
     private static final double ALIGN_TOLERANCE = 1.0;   // deg
@@ -100,9 +102,6 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
      */
     @Override
     public void runOpMode() {
-        //\
-        //
-        //initAprilTag();
         initLimelight();
 
         // Wait for the DS start button to be touched.
@@ -110,11 +109,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         telemetry.addData(">", "Touch START to start OpMode");
         telemetry.update();
 
-
-
         BNO055IMU.Parameters imuParameters;
-
-
 
         motor0 = hardwareMap.get(DcMotor.class, "motor0");
         motor1 = hardwareMap.get(DcMotor.class, "motor1");
@@ -128,35 +123,42 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         servo2 = hardwareMap.get(Servo.class, "servo2");
         imu1 = hardwareMap.get(BNO055IMU.class, "imu 1");
         ballColor = hardwareMap.get(NormalizedColorSensor.class, "ballColor"); // match config name
+        dist = hardwareMap.get(NormalizedColorSensor.class, "ballColor"); // match config name
         //blueLED = hardwareMap.get(DigitalChannel.class, "blueLED");
         //redLED = hardwareMap.get(DigitalChannel.class, "redLED");
 
         // Put initialization blocks here.
-
         motor0.setDirection(DcMotor.Direction.FORWARD);
-        motor1.setDirection(DcMotor.Direction.FORWARD);
-        motor2.setDirection(DcMotor.Direction.FORWARD);
-        motor3.setDirection(DcMotor.Direction.FORWARD);
-        motor0b.setDirection(DcMotor.Direction.REVERSE);
-        motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        motor1b.setDirection(DcMotor.Direction.FORWARD);
-        motor1b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        motor2b.setDirection(DcMotorSimple.Direction.FORWARD);
-        motor2b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         motor0.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor0.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        motor1.setDirection(DcMotor.Direction.FORWARD);
         motor1.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor1.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        motor2.setDirection(DcMotor.Direction.FORWARD);
         motor2.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor2.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        motor3.setDirection(DcMotor.Direction.FORWARD);
         motor3.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor3.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        motor0b.setDirection(DcMotor.Direction.REVERSE);
         motor0b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor0b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        motor1b.setDirection(DcMotor.Direction.FORWARD);
         motor1b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor1b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        motor2b.setDirection(DcMotorSimple.Direction.FORWARD);
+        motor2b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        motor2b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
         servo0.setPosition(0);
         servo1.setDirection(DcMotorSimple.Direction.FORWARD);
+
         imuParameters = new BNO055IMU.Parameters();
         imuParameters.angleUnit = BNO055IMU.AngleUnit.DEGREES;
         imuParameters.accelUnit = BNO055IMU.AccelUnit.METERS_PERSEC_PERSEC;
@@ -165,6 +167,10 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         YawValue = imu1.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.XYZ, AngleUnit.DEGREES).thirdAngle;
         //blueLED.setMode(DigitalChannel.Mode.OUTPUT);
         //redLED.setMode(DigitalChannel.Mode.OUTPUT);
+
+        if (ballColor instanceof SwitchableLight) {
+            ((SwitchableLight)ballColor).enableLight(true);
+        }
 
         waitForStart();
 
@@ -178,7 +184,6 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
                 if (gamepad1.a && !alignActive) {
                     alignActive = true;
                 }
-
 
                 if (alignActive) {
                     boolean aligned = alignToTarget();
@@ -198,6 +203,9 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
                 }
                 updateBallColor();
                 telemetryBallColor();
+                motor0b.setPower(1);
+                motor1b.setPower(1);
+                motor2b.setPower(1);
                 telemetry.update();
             }
         }
@@ -228,10 +236,13 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
                     targetCam.getPosition().z);
             telemetry.addData("TagDist (in)", "%.1f",
                     getWallTagDistanceInchesFromCameraPose(targetCam));
+            telemetry.addData("Tag z only (in)", "%.1f", targetCam.getPosition().z * 39.37);
+            telemetry.addData("Tag hypotenuse (in)", "%.1f", Math.hypot(
+                    targetCam.getPosition().x, targetCam.getPosition().z) * 39.37);
         } else {
             telemetry.addLine("TagCam: none");
         }
-        telemetry.addData("LL Valid", result.isValid());
+        //telemetry.addData("LL Valid", result.isValid());
         telemetry.addData("tx", "%.2f", result.getTx());
         telemetry.addData("ty", "%.2f", result.getTy());
         telemetry.addData("ta", "%.2f", result.getTa());
@@ -247,7 +258,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         double z = botpose.getPosition().z;
 
         telemetry.addData("Botpose x,y,z (m)", "(%.3f, %.3f, %.3f)", x, y, z);
-        telemetry.addData("Dist from origin (in)", "%.1f", Math.sqrt(x*x + y*y) * 39.37);
+        //telemetry.addData("Dist from origin (in)", "%.1f", Math.sqrt(x*x + y*y) * 39.37);
     }
 
 
@@ -301,12 +312,9 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
             double servoAngle = SERVO_MAX_ANGLE -
                     (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) * normalized;
 
-            motor0b.setPower(shooterPower);
-            motor1b.setPower(shooterPower);
+
             servo2.setPosition(servoAngle);
 
-            telemetry.addData("Tag Dist (in)", "%.1f", distanceInches);
-            telemetry.addData("Shooter Power", "%.2f", shooterPower);
             telemetry.addData("Servo2 Angle", "%.2f", servoAngle);
 
             // Kick the ball
@@ -335,6 +343,38 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         return distanceMeters * 39.37; // return inches (to match your shooter constants)
     }
     private void getData() {
+        double mps0 = motor0.getCurrentPosition();
+        double mps1 = motor1.getCurrentPosition();
+        double mps2 = motor2.getCurrentPosition();
+        double mps3 = motor3.getCurrentPosition();
+        double mps0b = motor0b.getCurrentPosition();
+        double mps1b = motor1b.getCurrentPosition();
+        double mps2b = motor2b.getCurrentPosition();
+
+        double mpw0 = motor0.getPower();
+        double mpw1 = motor1.getPower();
+        double mpw2 = motor2.getPower();
+        double mpw3 = motor3.getPower();
+        double mpw0b = motor0b.getPower();
+        double mpw1b = motor1b.getPower();
+        double mpw2b = motor2b.getPower();
+
+        double mv0 = ((DcMotorEx) motor0).getVelocity();
+        double mv1 = ((DcMotorEx) motor1).getVelocity();
+        double mv2 = ((DcMotorEx) motor2).getVelocity();
+        double mv3 = ((DcMotorEx) motor3).getVelocity();
+        double mv0b = ((DcMotorEx) motor0b).getVelocity();
+        double mv1b = ((DcMotorEx) motor1b).getVelocity();
+        double mv2b = ((DcMotorEx) motor2b).getVelocity();
+
+        telemetry.addData("M Pos", "(%.1f, %.1f, %.1f, %.1f)", mps0, mps1, mps2, mps3);
+        telemetry.addData("M Power", "(%.1f, %.1f, %.1f, %.1f)", mpw0, mpw1, mpw2, mpw3);
+        telemetry.addData("M Velocity", "(%.1f, %.1f, %.1f, %.1f)", mv0, mv1, mv2, mv3);
+        telemetry.addData("Shoot Power", "(%.1f, %.1f)", mpw0b, mpw1b);
+        telemetry.addData("Shoot Velocity", "(%.1f, %.1f)", mv0b, mv1b);
+        telemetry.addData("Intake Power", "(%.1f)", mv2b);
+
+        /*
         telemetry.addData("Motor 0 Pos", motor0.getCurrentPosition());
         telemetry.addData("Motor 1 Pos", motor1.getCurrentPosition());
         telemetry.addData("motor 2 Pos", motor2.getCurrentPosition());
@@ -349,8 +389,8 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         telemetry.addData("VelMotor1", ((DcMotorEx) motor1).getVelocity());
         telemetry.addData("VelMotor2", ((DcMotorEx) motor2).getVelocity());
         telemetry.addData("VelMotor3", ((DcMotorEx) motor3).getVelocity());
-        telemetryLimeLight();
-        telemetry.update();
+        */
+
 
     }
 
