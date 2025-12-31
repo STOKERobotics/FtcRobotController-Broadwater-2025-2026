@@ -17,14 +17,16 @@ import com.qualcomm.robotcore.hardware.ColorSensor;
 import com.qualcomm.robotcore.hardware.NormalizedColorSensor;
 import com.qualcomm.robotcore.hardware.NormalizedRGBA;
 import com.qualcomm.robotcore.hardware.SwitchableLight;
+import com.qualcomm.robotcore.hardware.AnalogInput;
 
 import android.graphics.Color;
-
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 import org.firstinspires.ftc.vision.VisionPortal;
+
+import java.util.List;
 
 
 @TeleOp(name = "USE THIS ONE BetterSimpleDrive")
@@ -46,6 +48,12 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     private BNO055IMU imu1;
     private DigitalChannel blueLED;
     private DigitalChannel redLED;
+    private AnalogInput laser;
+    private DigitalChannel mag0;
+    private DigitalChannel mag1;
+
+    // REV-11-1271 through bore encoder
+    private static final int TICKS_PER_REV = 8192;
 
     // Limelight alignment control
     private static final double ALIGN_KP = 0.03;
@@ -69,8 +77,22 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     private static final long   KICK_DURATION_MS = 350;  // how long to stay extended
     
     private NormalizedColorSensor ballColor;
+
     private boolean ballIsGreen = false;
     private boolean ballIsPurple = false;
+
+    private double servo2Pos = 0.5;                 // start midpoint (change if you want)
+    private static final double SERVO2_MIN = 0.0;
+    private static final double SERVO2_MAX = 1.0;
+
+    // how fast it moves while you hold (position units per second)
+    private static final double SERVO2_RATE = 0.6;
+
+    private double lastServo2Time = 0.0;
+
+    private boolean motifLatched = false;
+    private int latchedTagId = -1;
+    private String latchedMotif = "NONE";
     
     float RSX;
     double YawValue;
@@ -86,6 +108,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     private boolean wasButtonAPressed = false;
     private boolean wasButtonBPressed = false;
     private Limelight3A limelight;
+    private DcMotorEx odo3b;
 
     /**
      * This function is executed when this Op Mode is selected from the Driver Station.
@@ -93,6 +116,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     @Override
     public void runOpMode() {
         initLimelight();
+
 
         // Wait for the DS start button to be touched.
         telemetry.addData("DS preview on/off", "3 dots, Camera Stream");
@@ -111,15 +135,21 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         servo0 = hardwareMap.get(Servo.class, "servo0");
         servo1 = hardwareMap.get(CRServo.class, "servo1");
         servo2 = hardwareMap.get(Servo.class, "servo2");
+        laser = hardwareMap.get(AnalogInput.class, "laser");
+        servo2.setPosition(servo2Pos);
+        lastServo2Time = getRuntime();
         imu1 = hardwareMap.get(BNO055IMU.class, "imu 1");
         ballColor = hardwareMap.get(NormalizedColorSensor.class, "ballColor"); // match config name
         //blueLED = hardwareMap.get(DigitalChannel.class, "blueLED");
         //redLED = hardwareMap.get(DigitalChannel.class, "redLED");
+        mag0 = hardwareMap.get(DigitalChannel.class, "mag0");
+        mag1 = hardwareMap.get(DigitalChannel.class, "mag1");
 
         // Put initialization blocks here.
         motor0.setDirection(DcMotor.Direction.FORWARD);
         motor0.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor0.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
 
         motor1.setDirection(DcMotor.Direction.FORWARD);
         motor1.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
@@ -145,8 +175,9 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         motor2b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor2b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
+
         servo0.setPosition(0);
-        servo1.setDirection(DcMotorSimple.Direction.FORWARD);
+        //servo1.setDirection(DcMotorSimple.Direction.FORWARD);
 
         imuParameters = new BNO055IMU.Parameters();
         imuParameters.angleUnit = BNO055IMU.AngleUnit.DEGREES;
@@ -156,6 +187,8 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         YawValue = imu1.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.XYZ, AngleUnit.DEGREES).thirdAngle;
         //blueLED.setMode(DigitalChannel.Mode.OUTPUT);
         //redLED.setMode(DigitalChannel.Mode.OUTPUT);
+        // after hardwareMap is ready
+        odo3b = hardwareMap.get(DcMotorEx.class, "odo3b");
 
         if (ballColor instanceof SwitchableLight) {
             ((SwitchableLight)ballColor).enableLight(true);
@@ -166,6 +199,17 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         if (opModeIsActive()) {
 
             while (opModeIsActive()) {
+
+                if (mag0.getState())
+                    telemetry.addLine("mag0 false");
+                else
+                    telemetry.addLine("mag0 true");
+                if (mag1.getState())
+                    telemetry.addLine("mag1 false");
+                else
+                    telemetry.addLine("mag1 true");
+                merryGoRound();
+
 
                 getData();
                 telemetryLimeLight();
@@ -192,9 +236,19 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
                 }
                 updateBallColor();
                 telemetryBallColor();
+                /* TURN BACK ON
                 motor0b.setPower(1);
                 motor1b.setPower(1);
                 motor2b.setPower(1);
+                 */
+
+                double v = laser.getVoltage();        // 0.0 to ~3.3V
+                double mm = (v / 3.3) * 1000.0;       // 0–1000mm mapped to 0–3.3V :contentReference[oaicite:3]{index=3}
+                double inches = mm / 25.4;
+
+                telemetry.addData("Laser Dist", "%.0f mm  (%.1f in)", mm, inches);
+                int ticks = odo3b.getCurrentPosition();
+                telemetry.addData("odo3b ticks", ticks);
                 telemetry.update();
             }
         }
@@ -218,28 +272,30 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
             telemetry.addLine("LLResult = null");
             return;
         }
+        telemetryTagMotifs(result);
+        updateLatchedMotif(result);
+        telemetry.addData("Stored Motif", "%s (Tag %d)", latchedMotif, latchedTagId);
         Pose3D targetCam = getBestTagPoseCameraSpace(result);
         if (targetCam != null) {
-            telemetry.addData("TagCam x z (m)", "%.2f %.2f",
-                    targetCam.getPosition().x,
-                    targetCam.getPosition().z);
-            telemetry.addData("TagDist (in)", "%.1f",
-                    getWallTagDistanceInchesFromCameraPose(targetCam));
-            telemetry.addData("Tag z only (in)", "%.1f", targetCam.getPosition().z * 39.37);
-            telemetry.addData("Tag hypotenuse (in)", "%.1f", Math.hypot(
-                    targetCam.getPosition().x, targetCam.getPosition().z) * 39.37);
+            double xIn = targetCam.getPosition().x * 39.37;
+            double yIn = targetCam.getPosition().y * 39.37;
+            double zIn = targetCam.getPosition().z * 39.37;
+
+            double distTag = Math.sqrt(xIn*xIn + yIn*yIn + zIn*zIn); // full 3D
+
+            telemetry.addData("Distance from tag (in)", "%.1f", distTag);
+
         } else {
             telemetry.addLine("TagCam: none");
         }
         //telemetry.addData("LL Valid", result.isValid());
-        telemetry.addData("tx", "%.2f", result.getTx());
-        telemetry.addData("ty", "%.2f", result.getTy());
-        telemetry.addData("ta", "%.2f", result.getTa());
+        //telemetry.addData("tx", "%.2f", result.getTx());
+        //telemetry.addData("ty", "%.2f", result.getTy());
+        //telemetry.addData("ta", "%.2f", result.getTa());
 
         Pose3D botpose = result.getBotpose();
         if (botpose == null) {
             telemetry.addLine("botpose = null (localization not producing pose)");
-            return;
         }
 
         double x = botpose.getPosition().x;
@@ -363,39 +419,97 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         telemetry.addData("Shoot Velocity", "(%.1f, %.1f)", mv0b, mv1b);
         telemetry.addData("Intake Power", "(%.1f)", mv2b);
 
-        /*
-        telemetry.addData("Motor 0 Pos", motor0.getCurrentPosition());
-        telemetry.addData("Motor 1 Pos", motor1.getCurrentPosition());
-        telemetry.addData("motor 2 Pos", motor2.getCurrentPosition());
-        telemetry.addData("motor 3 Pos", motor3.getCurrentPosition());
-        telemetry.addData("powerMotor0", motor0.getPower());
-        telemetry.addData("powerMotor1", motor1.getPower());
-        telemetry.addData("powerMotor2", motor2.getPower());
-        telemetry.addData("powerMotor3", motor3.getPower());
-        telemetry.addData("powerMotor0b", motor0b.getPower());
-        telemetry.addData("powerMotor1b", motor1b.getPower());
-        telemetry.addData("VelMotor0", ((DcMotorEx) motor0).getVelocity());
-        telemetry.addData("VelMotor1", ((DcMotorEx) motor1).getVelocity());
-        telemetry.addData("VelMotor2", ((DcMotorEx) motor2).getVelocity());
-        telemetry.addData("VelMotor3", ((DcMotorEx) motor3).getVelocity());
-        */
 
 
+    }
+
+    // Map AprilTag ID -> your "motif" meaning
+    private String decodeMotifFromTagId(int tagId) {
+        switch (tagId) {
+            // EXAMPLES (replace with YOUR real motifs)
+            case 21:  return "GPP";
+            case 22:  return "PGP";
+            case 23:  return "PPG";
+
+            // Add more cases as needed...
+            // case 5: return "....";
+
+            default: return "UNKNOWN";
+        }
+    }
+    private void updateLatchedMotif(LLResult result) {
+        if (motifLatched) return;                 // already stored
+        if (result == null || !result.isValid()) return;
+
+        List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
+        if (tags == null || tags.isEmpty()) return;
+
+        // Pick the best tag by largest area (same idea you use elsewhere)
+        LLResultTypes.FiducialResult best = tags.get(0);
+        for (LLResultTypes.FiducialResult t : tags) {
+            if (t.getTargetArea() > best.getTargetArea()) best = t;
+        }
+
+        int id = best.getFiducialId();
+        String motif = decodeMotifFromTagId(id);
+
+        // Latch only if it's a real motif (won't store UNKNOWN)
+        if (!"UNKNOWN".equals(motif)) {
+            motifLatched = true;
+            latchedTagId = id;
+            latchedMotif = motif;
+        }
+    }
+    private void telemetryTagMotifs(LLResult result) {
+        if (result == null || !result.isValid()) {
+            telemetry.addLine("Tags: none (no valid LL result)");
+            return;
+        }
+
+        List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
+        if (tags == null || tags.isEmpty()) {
+            telemetry.addLine("Tags: none detected");
+            return;
+        }
+
+        telemetry.addData("Tags Detected", tags.size());
+
+        // Print each tag's ID + decoded motif (+ some useful aiming info)
+        for (int i = 0; i < tags.size(); i++) {
+            LLResultTypes.FiducialResult t = tags.get(i);
+
+            int id;
+            try {
+                // Limelight fiducial API in FTC typically provides this:
+                id = t.getFiducialId();
+            } catch (Exception e) {
+                // If your SDK uses a different name, tell me the error and I’ll adjust.
+                telemetry.addLine("Tag ID method not found on FiducialResult");
+                return;
+            }
+
+            String motif = decodeMotifFromTagId(id);
+
+            telemetry.addData("April Tag Motif", motif);
+        }
     }
 
     private void telemetryBallColor() {
         NormalizedRGBA c = ballColor.getNormalizedColors();
         float[] hsv = new float[3];
         Color.RGBToHSV((int)(c.red*255), (int)(c.green*255), (int)(c.blue*255), hsv);
-    
+
         telemetry.addData("BallHue", "%.0f", hsv[0]);
+        telemetry.addData("Ball HSV", "H=%.0f S=%.2f V=%.2f", hsv[0], hsv[1], hsv[2]);
+        telemetry.addData("Ball RGB", "r=%.2f g=%.2f b=%.2f", c.red, c.green, c.blue);
         telemetry.addData("Ball", ballIsGreen ? "GREEN" : (ballIsPurple ? "PURPLE" : "UNKNOWN"));
     }
+
 
     private Pose3D getBestTagPoseCameraSpace(LLResult result) {
         if (result == null || !result.isValid()) return null;
     
-        java.util.List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
+        List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
         if (tags == null || tags.isEmpty()) return null;
     
         // Pick the "best" tag: easiest heuristic = largest target area
@@ -419,7 +533,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
 
     private void updateBallColor() {
         NormalizedRGBA c = ballColor.getNormalizedColors();
-    
+
         float[] hsv = new float[3];
         Color.RGBToHSV(
                 (int)(c.red   * 255),
@@ -433,27 +547,75 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         float val = hsv[2];        // 0..1
     
         // Basic “is there actually a colored ball here?” gate
-        boolean confident = (sat > 0.35) && (val > 0.10);
-    
+        boolean confident = (sat > 0.15) && (val > 0.00);
+
         // Starting ranges (you WILL tune these with telemetry)
         // Green is usually ~90–150 hue, Purple is usually ~250–310 hue
-        ballIsGreen  = confident && (hue >= 90 && hue <= 150);
-        ballIsPurple = confident && (hue >= 250 && hue <= 310);
+        ballIsGreen  = confident && (hue >= 120 && hue <= 180);
+        ballIsPurple = confident && (hue >= 210 && hue <= 255);
     
         // If lighting makes purple wrap weirdly, you can broaden:
         // ballIsPurple = confident && ((hue >= 240 && hue <= 320));
     }
 
-    private void buttons() {
-        // Run motor0b at full power (1) when button A is pressed, stop when released
-        if (gamepad2.dpad_up) {
-//            motor0b.setPower(1.0); // Move up
-        } else if (gamepad2.dpad_down) {
-//            motor0b.setPower(-1.0); // Move down
+    private void merryGoRound(){
+
+        double slot0 = 0;
+        double slot1 = 0;
+        double slot2 = 0;
+
+
+        if (!mag0.getState() && !mag1.getState()) {
+            telemetry.addLine("2");
+            servo1.setPower(0);
+            if (ballIsGreen){
+                slot0 = 1;
+            } else if (ballIsPurple) {
+                slot0 = 1;
+
+            }
+        } else if (!mag0.getState()) {
+            telemetry.addLine("mag 0");
+            servo1.setPower(0);
+            if (ballIsGreen){
+                slot1 = 1;
+            } else if (ballIsPurple) {
+                slot1 = 1;
+
+            }
+        } else if (!mag1.getState()) {
+            telemetry.addLine("mag 1");
+            servo1.setPower(0);
+            if (ballIsGreen){
+                slot2 = 1;
+            } else if (ballIsPurple) {
+                slot2 = 1;
+
+            }
         } else {
-//            motor0b.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-//            motor0b.setPower(0); // Stop motor
+            telemetry.addLine("none");
+            servo1.setPower(1);
         }
+        telemetry.addData( "slots", "slot0 slot1 slot2" , , slot0 , slot1, slot2);
+    }
+
+    private void buttons() {
+        double now = getRuntime();
+        double dt = now - lastServo2Time;
+        lastServo2Time = now;
+        dt = Math.max(0, Math.min(0.1, dt));
+
+        // HOLD dpad to move, release to hold position
+        if (gamepad2.dpad_up) {
+            servo2Pos += SERVO2_RATE * dt;
+        } else if (gamepad2.dpad_down) {
+            servo2Pos -= SERVO2_RATE * dt;
+        }
+
+        servo2Pos = Math.max(SERVO2_MIN, Math.min(SERVO2_MAX, servo2Pos));
+        servo2.setPosition(servo2Pos);
+        telemetry.addData("Shooter Position", "%.3f", servo2.getPosition());
+
 
 
 
@@ -467,16 +629,8 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
             motor1b.setPower(1);
 
         }
-        if (gamepad2.left_bumper) {
- //           servo1.setPower(-1.0);   // backwards while held
-        } else {
-//            servo1.setPower(1.0);    // forward when released
-        }
-        if (gamepad2.right_bumper) {
-            servo2.setPosition(1.0);   // backwards while held
-        } else {
-            servo2.setPosition(0.0);    // forward when released
-        }
+
+
 
 
 
@@ -563,11 +717,4 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
             wasButtonBPressed = gamepad2.y;         // Remember the button state
         }
 }
-/**
-     * Describe this function...
-     */
-
-
-
-
 
