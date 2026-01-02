@@ -13,7 +13,6 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.DigitalChannel;
 import com.qualcomm.robotcore.hardware.Servo;
 
-import com.qualcomm.robotcore.hardware.ColorSensor;
 import com.qualcomm.robotcore.hardware.NormalizedColorSensor;
 import com.qualcomm.robotcore.hardware.NormalizedRGBA;
 import com.qualcomm.robotcore.hardware.SwitchableLight;
@@ -24,16 +23,11 @@ import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
-import org.firstinspires.ftc.vision.VisionPortal;
 
 import java.util.List;
 
-
-@TeleOp(name = "USE THIS ONE BetterSimpleDrive")
-public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
-
-
-
+@TeleOp(name = "Broadwater Robotics TeleOp")
+public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
     private DcMotor motor0;
     private DcMotor motor1;
@@ -42,18 +36,17 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     private DcMotor motor0b;
     private DcMotor motor1b;
     private DcMotor motor2b;
-    private Servo servo0;
-    private CRServo servo1;
-    private Servo servo2;
+    private Servo servo0; // Kicker
+    private CRServo servo1; // Merry Go Round Tray
+    private Servo servo2; // Shooter Angle
     private BNO055IMU imu1;
     private DigitalChannel blueLED;
     private DigitalChannel redLED;
     private AnalogInput laser;
     private DigitalChannel mag0;
     private DigitalChannel mag1;
-
-    // REV-11-1271 through bore encoder
-    private static final int TICKS_PER_REV = 8192;
+    private DigitalChannel mag2;
+    private DigitalChannel mag3;
 
     // Limelight alignment control
     private static final double ALIGN_KP = 0.03;
@@ -62,10 +55,8 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     private boolean alignActive = false;
 
     // Shooter control constants
-    private static final double SHOOTER_BASE_POWER = 0.5;
-    private static final double SHOOTER_MAX_POWER  = 1.0;
-    private static final double SHOOTER_MIN_DIST   = 20.0;  // inches
-    private static final double SHOOTER_MAX_DIST   = 70.0;  // inches
+    private static final double SHOOTER_MIN_DIST   = 50.0;  // inches
+    private static final double SHOOTER_MAX_DIST   = 120.0;  // inches
 
     // Servo angle limits
     private static final double SERVO_MIN_ANGLE = 0.25;
@@ -78,14 +69,10 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     
     private NormalizedColorSensor ballColor;
 
-    private boolean ballIsGreen = false;
-    private boolean ballIsPurple = false;
-
+    private String ballColorValue;
     private double servo2Pos = 0.5;                 // start midpoint (change if you want)
     private static final double SERVO2_MIN = 0.0;
     private static final double SERVO2_MAX = 1.0;
-
-    // how fast it moves while you hold (position units per second)
     private static final double SERVO2_RATE = 0.6;
 
     private double lastServo2Time = 0.0;
@@ -93,6 +80,23 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     private boolean motifLatched = false;
     private int latchedTagId = -1;
     private String latchedMotif = "NONE";
+    private double lastTagDistanceIn = -1;  // -1 means unknown
+
+    // Merry-go-round state machine
+    private enum INTAKEState { INIT_TO_SLOT0, WAIT_COLOR_0, MOVE_TO_SLOT1, WAIT_COLOR_1, MOVE_TO_SLOT2, WAIT_COLOR_2, DONE }
+    private INTAKEState intakeState = INTAKEState.INIT_TO_SLOT0;
+
+    private int currentSlot = 0;
+    private boolean colorLatched = false; // edge-detect so one ball = one store
+
+    // Marks which physical slot has already been fired
+    private final boolean[] slotFired = new boolean[3];
+
+    // Adjust if servo direction is backwards
+    private static final double MGR_POWER = 1.0;
+
+    // Safety so you don’t spin forever if a magnet fails
+    private static final long MGR_MOVE_TIMEOUT_MS = 2000;
     
     float RSX;
     double YawValue;
@@ -108,7 +112,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     private boolean wasButtonAPressed = false;
     private boolean wasButtonBPressed = false;
     private Limelight3A limelight;
-    private DcMotorEx odo3b;
+    String[] slots = new String[3];
 
     /**
      * This function is executed when this Op Mode is selected from the Driver Station.
@@ -117,8 +121,6 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     public void runOpMode() {
         initLimelight();
 
-
-        // Wait for the DS start button to be touched.
         telemetry.addData("DS preview on/off", "3 dots, Camera Stream");
         telemetry.addData(">", "Touch START to start OpMode");
         telemetry.update();
@@ -144,6 +146,8 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         //redLED = hardwareMap.get(DigitalChannel.class, "redLED");
         mag0 = hardwareMap.get(DigitalChannel.class, "mag0");
         mag1 = hardwareMap.get(DigitalChannel.class, "mag1");
+        mag2 = hardwareMap.get(DigitalChannel.class, "mag2");
+        mag3 = hardwareMap.get(DigitalChannel.class, "mag3");
 
         // Put initialization blocks here.
         motor0.setDirection(DcMotor.Direction.FORWARD);
@@ -188,7 +192,6 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         //blueLED.setMode(DigitalChannel.Mode.OUTPUT);
         //redLED.setMode(DigitalChannel.Mode.OUTPUT);
         // after hardwareMap is ready
-        odo3b = hardwareMap.get(DcMotorEx.class, "odo3b");
 
         if (ballColor instanceof SwitchableLight) {
             ((SwitchableLight)ballColor).enableLight(true);
@@ -199,17 +202,6 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         if (opModeIsActive()) {
 
             while (opModeIsActive()) {
-
-                if (mag0.getState())
-                    telemetry.addLine("mag0 false");
-                else
-                    telemetry.addLine("mag0 true");
-                if (mag1.getState())
-                    telemetry.addLine("mag1 false");
-                else
-                    telemetry.addLine("mag1 true");
-                merryGoRound();
-
 
                 getData();
                 telemetryLimeLight();
@@ -230,11 +222,10 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
                 }
                 else {
                     sticks1();
-                    sticks2();
-                    sticks4();// normal drive
                     buttons();   // manual controls
                 }
                 updateBallColor();
+                merryGoRoundIntake();
                 telemetryBallColor();
                 /* TURN BACK ON
                 motor0b.setPower(1);
@@ -247,8 +238,6 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
                 double inches = mm / 25.4;
 
                 telemetry.addData("Laser Dist", "%.0f mm  (%.1f in)", mm, inches);
-                int ticks = odo3b.getCurrentPosition();
-                telemetry.addData("odo3b ticks", ticks);
                 telemetry.update();
             }
         }
@@ -260,11 +249,8 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         telemetry.setMsTransmissionInterval(11);
         limelight.pipelineSwitch(0);
         limelight.start();
-        telemetryLimeLight();
 
-    }   // end method initLimelight()
-
-
+    }
     private void telemetryLimeLight() {
         LLResult result = limelight.getLatestResult();
 
@@ -274,7 +260,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         }
         telemetryTagMotifs(result);
         updateLatchedMotif(result);
-        telemetry.addData("Stored Motif", "%s (Tag %d)", latchedMotif, latchedTagId);
+        telemetry.addData("Stored Tag Colors", "%s (Tag %d)", latchedMotif, latchedTagId);
         Pose3D targetCam = getBestTagPoseCameraSpace(result);
         if (targetCam != null) {
             double xIn = targetCam.getPosition().x * 39.37;
@@ -282,16 +268,14 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
             double zIn = targetCam.getPosition().z * 39.37;
 
             double distTag = Math.sqrt(xIn*xIn + yIn*yIn + zIn*zIn); // full 3D
+            lastTagDistanceIn = distTag;
 
             telemetry.addData("Distance from tag (in)", "%.1f", distTag);
 
         } else {
+            lastTagDistanceIn = -1;
             telemetry.addLine("TagCam: none");
         }
-        //telemetry.addData("LL Valid", result.isValid());
-        //telemetry.addData("tx", "%.2f", result.getTx());
-        //telemetry.addData("ty", "%.2f", result.getTy());
-        //telemetry.addData("ta", "%.2f", result.getTa());
 
         Pose3D botpose = result.getBotpose();
         if (botpose == null) {
@@ -305,8 +289,6 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         telemetry.addData("Botpose x,y,z (m)", "(%.3f, %.3f, %.3f)", x, y, z);
         //telemetry.addData("Dist from origin (in)", "%.1f", Math.sqrt(x*x + y*y) * 39.37);
     }
-
-
 
     private boolean alignToTarget() {
         LLResult result = limelight.getLatestResult();
@@ -338,54 +320,115 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         }
     }
     private void adjustShooterAndFire() {
-        LLResult result = limelight.getLatestResult();
-        if (result != null && result.isValid() && result.getBotpose() != null) {
 
-            Pose3D botpose = result.getBotpose();
-            double distanceMeters = Math.sqrt(
-                    botpose.getPosition().x * botpose.getPosition().x +
-                    botpose.getPosition().y * botpose.getPosition().y);
-            double distanceInches = distanceMeters * 39.37;
+        // ---- basic checks ----
+        if (!motifLatched || latchedMotif == null || latchedMotif.length() != 3 || "UNKNOWN".equals(latchedMotif)) {
+            telemetry.addLine("Shooter: No valid motif latched");
+            return;
+        }
+        if (!allSlotsLoaded()) {
+            telemetry.addLine("Shooter: Slots not all loaded yet");
+            telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
+            return;
+        }
+        if (lastTagDistanceIn <= 0) {
+            telemetry.addLine("Shooter: No tag distance");
+            return;
+        }
 
-            // Normalize to 0–1 range
-            double normalized = Math.max(0, Math.min(1,
-                    (distanceInches - SHOOTER_MIN_DIST) /
-                    (SHOOTER_MAX_DIST - SHOOTER_MIN_DIST)));
+        // ---- compute shooter angle from distance ----
+        double distanceInches = lastTagDistanceIn;
+        double normalized = Math.max(0, Math.min(1,
+                (distanceInches - SHOOTER_MIN_DIST) / (SHOOTER_MAX_DIST - SHOOTER_MIN_DIST)));
 
-            double shooterPower = SHOOTER_BASE_POWER +
-                    (SHOOTER_MAX_POWER - SHOOTER_BASE_POWER) * normalized;
-            double servoAngle = SERVO_MAX_ANGLE -
-                    (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) * normalized;
+        double servoAngle = SERVO_MAX_ANGLE - (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) * normalized;
+        servo2.setPosition(servoAngle);
 
+        telemetry.addData("Motif", latchedMotif);
+        telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
+        telemetry.addData("Dist(in)", "%.1f", distanceInches);
+        telemetry.addData("Kicker Angle", "%.2f", servoAngle);
+        telemetry.update();
 
-            servo2.setPosition(servoAngle);
+        // Reset fired markers for this run
+        for (int i = 0; i < 3; i++) slotFired[i] = false;
 
-            telemetry.addData("Servo2 Angle", "%.2f", servoAngle);
+        // ---- shoot in motif order ----
+        char[] order = latchedMotif.toCharArray(); // ex: ['g','p','p']
 
-            // Kick the ball
+        for (int shotIndex = 0; shotIndex < 3 && opModeIsActive(); shotIndex++) {
+            char wanted = order[shotIndex];
+
+            int slotToShoot = findSlotForColor(wanted);
+            if (slotToShoot < 0) {
+                telemetry.addData("Shooter", "Missing color '%c' in slots (or already used)", wanted);
+                telemetry.update();
+                return; // stop sequence
+            }
+
+            telemetry.addData("Shooting", "shot %d wants %c -> slot %d", shotIndex, wanted, slotToShoot);
+            telemetry.update();
+
+            // Rotate carousel until correct physical slot is at the shooter
+            rotateToSlotBlocking(slotToShoot);
+
+            // Fire one ball
             servo2.setPosition(KICK_EXTEND_POS);
             sleep(KICK_DURATION_MS);
             servo2.setPosition(KICK_RETRACT_POS);
-            telemetry.addLine("Ball Fired!");
-        } else {
-            telemetry.addLine("Shooter: No tag or botpose");
+
+            // Mark used
+            slotFired[slotToShoot] = true;
+
+            // Small settle delay (optional)
+            sleep(120);
         }
+
+        telemetry.addLine("Shoot sequence done!");
+    }
+
+    private boolean atShootSlot(int slot) {
+        switch (slot) {
+            case 0: return atShootSlot0();
+            case 1: return atShootSlot1();
+            case 2: return atShootSlot2();
+            default: return false;
+        }
+    }
+
+    private int findSlotForColor(char wanted) {
+        String w = String.valueOf(wanted); // 'g' -> "g"
+        for (int i = 0; i < 3; i++) {
+            if (!slotFired[i] && w.equals(slots[i])) return i;
+        }
+        return -1; // not found
+    }
+
+    private boolean allSlotsLoaded() {
+        return slots[0] != null && slots[1] != null && slots[2] != null;
+    }
+
+    private void rotateToSlotBlocking(int targetSlot) {
+        long start = System.currentTimeMillis();
+        servo1.setPower(MGR_POWER);
+
+        while (opModeIsActive() && !atShootSlot(targetSlot)
+                && (System.currentTimeMillis() - start) < MGR_MOVE_TIMEOUT_MS) {
+
+            telemetry.addData("Rotating to shoot slot", targetSlot);
+            telemetry.addData("Mag2", mag2.getState());
+            telemetry.addData("Mag3", mag3.getState());
+            telemetry.update();
+            idle();
+        }
+
+        servo1.setPower(0);
     }
     private void stopDrive() {
         motor0.setPower(0);
         motor1.setPower(0);
         motor2.setPower(0);
         motor3.setPower(0);
-    }
-    public double getDistanceFromTag(Pose3D pose){
-        if (pose == null) return -1; // or Double.NaN
-    
-        // Planar distance = sqrt(x^2 + z^2)  (meters)
-        double x = pose.getPosition().x;
-        double z = pose.getPosition().z;
-    
-        double distanceMeters = Math.sqrt(x * x + z * z);
-        return distanceMeters * 39.37; // return inches (to match your shooter constants)
     }
     private void getData() {
         double mps0 = motor0.getCurrentPosition();
@@ -418,22 +461,13 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         telemetry.addData("Shoot Power", "(%.1f, %.1f)", mpw0b, mpw1b);
         telemetry.addData("Shoot Velocity", "(%.1f, %.1f)", mv0b, mv1b);
         telemetry.addData("Intake Power", "(%.1f)", mv2b);
-
-
-
     }
 
-    // Map AprilTag ID -> your "motif" meaning
     private String decodeMotifFromTagId(int tagId) {
         switch (tagId) {
-            // EXAMPLES (replace with YOUR real motifs)
-            case 21:  return "GPP";
-            case 22:  return "PGP";
-            case 23:  return "PPG";
-
-            // Add more cases as needed...
-            // case 5: return "....";
-
+            case 21:  return "gpp";
+            case 22:  return "pgp";
+            case 23:  return "ppg";
             default: return "UNKNOWN";
         }
     }
@@ -502,7 +536,7 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         telemetry.addData("BallHue", "%.0f", hsv[0]);
         telemetry.addData("Ball HSV", "H=%.0f S=%.2f V=%.2f", hsv[0], hsv[1], hsv[2]);
         telemetry.addData("Ball RGB", "r=%.2f g=%.2f b=%.2f", c.red, c.green, c.blue);
-        telemetry.addData("Ball", ballIsGreen ? "GREEN" : (ballIsPurple ? "PURPLE" : "UNKNOWN"));
+        telemetry.addData("Ball", ballColorValue );
     }
 
 
@@ -520,17 +554,6 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
     
         return best.getTargetPoseCameraSpace(); // <-- this is the key
     }
-
-    private double getWallTagDistanceInchesFromCameraPose(Pose3D targetCamPose) {
-        if (targetCamPose == null) return -1;
-    
-        double x = targetCamPose.getPosition().x;  // left/right (m)
-        double z = targetCamPose.getPosition().z;  // forward/out (m)
-    
-        double horizontalMeters = Math.sqrt(x * x + z * z);
-        return horizontalMeters * 39.37;
-    }
-
     private void updateBallColor() {
         NormalizedRGBA c = ballColor.getNormalizedColors();
 
@@ -541,62 +564,111 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
                 (int)(c.blue  * 255),
                 hsv
         );
-    
-        float hue = hsv[0];        // 0..360
-        float sat = hsv[1];        // 0..1
-        float val = hsv[2];        // 0..1
-    
-        // Basic “is there actually a colored ball here?” gate
-        boolean confident = (sat > 0.15) && (val > 0.00);
 
-        // Starting ranges (you WILL tune these with telemetry)
-        // Green is usually ~90–150 hue, Purple is usually ~250–310 hue
-        ballIsGreen  = confident && (hue >= 120 && hue <= 180);
-        ballIsPurple = confident && (hue >= 210 && hue <= 255);
-    
-        // If lighting makes purple wrap weirdly, you can broaden:
-        // ballIsPurple = confident && ((hue >= 240 && hue <= 320));
+        float hue = hsv[0];
+        float sat = hsv[1];
+        float val = hsv[2];
+
+        boolean confident = (sat > 0.15) && (val > 0.05);
+
+        if(confident && (hue >= 120 && hue <= 180)) {
+            ballColorValue = "g";
+        } else if(confident && (hue >= 210 && hue <= 255)) {
+            ballColorValue = "p";
+        } else {
+            ballColorValue = null;   // ✅ IMPORTANT: clears when no ball/color seen
+        }
     }
 
-    private void merryGoRound(){
 
-        double slot0 = 0;
-        double slot1 = 0;
-        double slot2 = 0;
+    private boolean colorSeen() {
+        return ballColorValue != null && !ballColorValue.isEmpty();
+    }
 
+    // Slot detectors (your definitions)
+    private boolean atSlot0() { return !mag0.getState() && !mag1.getState(); }
+    private boolean atSlot1() { return !mag0.getState() && mag1.getState(); }
+    private boolean atSlot2() { return mag0.getState() && !mag1.getState(); }
 
-        if (!mag0.getState() && !mag1.getState()) {
-            telemetry.addLine("2");
-            servo1.setPower(0);
-            if (ballIsGreen){
-                slot0 = 1;
-            } else if (ballIsPurple) {
-                slot0 = 1;
+    // SHOOTER slot detectors (mag2/mag3)  <-- translated mapping
+    private boolean atShootSlot0() { return !mag2.getState() && !mag3.getState(); }
+    private boolean atShootSlot1() { return !mag2.getState() &&  mag3.getState(); }
+    private boolean atShootSlot2() { return  mag2.getState() && !mag3.getState(); }
 
-            }
-        } else if (!mag0.getState()) {
-            telemetry.addLine("mag 0");
-            servo1.setPower(0);
-            if (ballIsGreen){
-                slot1 = 1;
-            } else if (ballIsPurple) {
-                slot1 = 1;
+    private void assignSlot(int slotNumber) {
+        slots[slotNumber] = ballColorValue;   // "g" or "p"
+    }
 
-            }
-        } else if (!mag1.getState()) {
-            telemetry.addLine("mag 1");
-            servo1.setPower(0);
-            if (ballIsGreen){
-                slot2 = 1;
-            } else if (ballIsPurple) {
-                slot2 = 1;
+    private void merryGoRoundIntake() {
 
-            }
-        } else {
-            telemetry.addLine("none");
-            servo1.setPower(1);
+        // ---- always evaluate color edge latch ----
+        boolean seen = colorSeen();
+        boolean newColorEvent = seen && !colorLatched;
+        if (seen) colorLatched = true;
+        else      colorLatched = false;
+
+        switch (intakeState) {
+
+            case INIT_TO_SLOT0:
+                // Spin until slot0 detected
+                servo1.setPower(1);
+                if (atSlot0()) {
+                    servo1.setPower(0);
+                    currentSlot = 0;
+                    intakeState = INTAKEState.WAIT_COLOR_0;
+                }
+                break;
+
+            case WAIT_COLOR_0:
+                servo1.setPower(0);
+                if (newColorEvent) {
+                    assignSlot(0);
+                    intakeState = INTAKEState.MOVE_TO_SLOT1;
+                }
+                break;
+
+            case MOVE_TO_SLOT1:
+                servo1.setPower(1);
+                if (atSlot1()) {
+                    servo1.setPower(0);
+                    currentSlot = 1;
+                    intakeState = INTAKEState.WAIT_COLOR_1;
+                }
+                break;
+
+            case WAIT_COLOR_1:
+                servo1.setPower(0);
+                if (newColorEvent) {
+                    assignSlot(1);
+                    intakeState = INTAKEState.MOVE_TO_SLOT2;
+                }
+                break;
+
+            case MOVE_TO_SLOT2:
+                servo1.setPower(1);
+                if (atSlot2()) {
+                    servo1.setPower(0);
+                    currentSlot = 2;
+                    intakeState = INTAKEState.WAIT_COLOR_2;
+                }
+                break;
+
+            case WAIT_COLOR_2:
+                servo1.setPower(0);
+                if (newColorEvent) {
+                    assignSlot(2);
+                    intakeState = INTAKEState.DONE;
+                }
+                break;
+
+            case DONE:
+                servo1.setPower(0);
+                break;
         }
-        telemetry.addData( "slots", "slot0 slot1 slot2" , , slot0 , slot1, slot2);
+
+        telemetry.addData("Intake State", intakeState);
+        telemetry.addData("BallColor", ballColorValue);
+        telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
     }
 
     private void buttons() {
@@ -616,23 +688,14 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         servo2.setPosition(servo2Pos);
         telemetry.addData("Shooter Position", "%.3f", servo2.getPosition());
 
-
-
-
-
-
         if (gamepad2.dpad_left) {
             motor0b.setPower(0);
             motor1b.setPower(0);
         } else {
-            motor0b.setPower(1);
-            motor1b.setPower(1);
-
+            //TURN BACK ON
+            //motor0b.setPower(1);
+            //motor1b.setPower(1);
         }
-
-
-
-
 
         if (gamepad2.x) {
             //servo1.setPower(1.0); // Move up
@@ -643,10 +706,6 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         }
 
     }
-
-    /**
-     * Describe this function...
-     */
     private void sticks2() {
         double gain;
 
@@ -662,10 +721,6 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         sticks4();
 
     }
-
-    /**
-     * Describe this function...
-     */
     private void sticks1() {
         RSX = -gamepad1.right_stick_x;
         LSY = gamepad1.left_stick_y;
@@ -673,9 +728,6 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
         sticks2();
     }
 
-    /**
-         * Gyro correct values. Code from ChatGTP created code.
-         */
         private void sticks4() {
 //            YawValue = Math.round(imu1.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.XYZ, AngleUnit.DEGREES).thirdAngle) * (Math.PI / 180);
 //            correctedStrafePower = strafePower * Math.cos(YawValue / 180 * Math.PI) - drivePower * Math.sin(YawValue / 180 * Math.PI);
@@ -688,9 +740,6 @@ public class USE_THIS_ONE_BetterSimpleDrive extends LinearOpMode {
             drive2();
         }
 
-    /**
-         * Send corrected values to motors
-         */
         private void drive2() {
             // Front right motor
             motor0.setPower((correctedDrivePower - correctedStrafePower) - rotatePower);

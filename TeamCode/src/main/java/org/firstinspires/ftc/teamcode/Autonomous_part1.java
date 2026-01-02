@@ -23,7 +23,9 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 
 import java.util.List;
 
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 
+@Disabled
 @Autonomous(name = "Autonomous 1")
 public class Autonomous_part1 extends LinearOpMode {
 
