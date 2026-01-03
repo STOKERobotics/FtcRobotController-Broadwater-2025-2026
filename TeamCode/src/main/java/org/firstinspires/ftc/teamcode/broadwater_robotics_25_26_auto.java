@@ -1,154 +1,337 @@
 package org.firstinspires.ftc.teamcode;
 
+import com.qualcomm.hardware.bosch.BNO055IMU;
 import com.qualcomm.hardware.limelightvision.LLResult;
+import com.qualcomm.hardware.limelightvision.LLResultTypes;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.hardware.AnalogInput;
+import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.DigitalChannel;
+import com.qualcomm.robotcore.hardware.NormalizedColorSensor;
+import com.qualcomm.robotcore.hardware.NormalizedRGBA;
+import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.hardware.SwitchableLight;
+
+import android.graphics.Color;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
+import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
+
+import java.util.List;
 
 @Autonomous(name = "Broadwater Robotics Auto")
 public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
-    // Drive motors (same names as your TeleOp)
-    private DcMotor motor0, motor1, motor2, motor3;
+    // -------------------- Hardware --------------------
+    private DcMotor motor0;
+    private DcMotor motor1;
+    private DcMotor motor2;
+    private DcMotor motor3;
+    private DcMotor motor0b;
+    private DcMotor motor1b;
+    private DcMotor motor2b;
 
-    // Limelight
+    private Servo servo0;   // Kicker
+    private CRServo servo1; // Merry Go Round Tray
+    private Servo servo2;   // Shooter Angle
+
+    private BNO055IMU imu1;
+    private DigitalChannel blueLED;
+    private DigitalChannel redLED;
+    private AnalogInput laser;
+
+    private DigitalChannel mag0;
+    private DigitalChannel mag1;
+    private DigitalChannel mag2;
+    private DigitalChannel mag3;
+
+    private NormalizedColorSensor ballColor;
+
+    // -------------------- Limelight --------------------
     private Limelight3A limelight;
 
-    // -------------------- TUNING --------------------
-    private static final double KP_XY = 1.2;        // meters -> power (start ~0.8 to 1.8)
-    private static final double KP_H  = 0.02;       // deg -> power (start ~0.015 to 0.03)
+    // Limelight alignment control
+    private static final double ALIGN_KP = 0.03;
+    private static final double ALIGN_TOLERANCE = 1.0;   // deg
+    private static final double ALIGN_MAX_POWER = 0.3;
+    private boolean alignActive = false;
+
+    // Shooter control constants (angle from distance)
+    private static final double SHOOTER_MIN_DIST = 50.0;   // inches
+    private static final double SHOOTER_MAX_DIST = 120.0;  // inches
+
+    // Servo angle limits
+    private static final double SERVO_MIN_ANGLE = 0.25;
+    private static final double SERVO_MAX_ANGLE = 0.85;
+
+    // Firing servo timing (Kicker = servo0)
+    private static final double KICK_EXTEND_POS = 1.0;
+    private static final double KICK_RETRACT_POS = 0.0;
+    private static final long KICK_DURATION_MS = 350;
+
+    // Shooter angle manual control
+    private double servo2Pos = 0.5;
+    private static final double SERVO2_MIN = 0.0;
+    private static final double SERVO2_MAX = 1.0;
+    private static final double SERVO2_RATE = 0.6;
+    private double lastServo2Time = 0.0;
+
+    // Motif latch
+    private boolean motifLatched = false;
+    private int latchedTagId = -1;
+    private String latchedMotif = "NONE";
+    private double lastTagDistanceIn = -1;
+
+    // Merry-go-round state machine
+    private enum INTAKEState { INIT_TO_SLOT0, WAIT_COLOR_0, MOVE_TO_SLOT1, WAIT_COLOR_1, MOVE_TO_SLOT2, WAIT_COLOR_2, DONE }
+    private INTAKEState intakeState = INTAKEState.INIT_TO_SLOT0;
+
+    private boolean colorLatched = false; // edge detect
+    private static final double MGR_POWER = 1.0;
+    private static final long MGR_MOVE_TIMEOUT_MS = 2000;
+
+    // Slot storage + fired tracking
+    private final boolean[] slotFired = new boolean[3];
+    String[] slots = new String[3]; // "g" or "p"
+
+    // Ball color
+    private String ballColorValue;
+
+    // Drive variables
+    float RSX;
+    float LSY;
+    float LSX;
+    double correctedStrafePower;
+    double strafePower;
+    double correctedDrivePower;
+    double drivePower;
+    double rotatePower;
+
+    // LEDs (unused in your current config)
+    private boolean isRedOn = false;
+    private boolean isBlueOn = false;
+    private boolean wasButtonAPressed = false;
+    private boolean wasButtonBPressed = false;
+
+    // -------------------- SEQUENCE ENGINE --------------------
+    private enum ControlMode { MANUAL, SEQUENCE }
+    private ControlMode controlMode = ControlMode.MANUAL;
+
+    private enum StepType {
+        DRIVE_TO,
+        INTAKE_UNTIL_FULL,
+        ALIGN_TO_TAG,
+        SHOOT_MOTIF,
+        WAIT,
+        DONE
+    }
+
+    private static class Command {
+        StepType type;
+
+        // DRIVE_TO
+        double x, y, headingDeg;
+        long timeoutMs;
+
+        // WAIT
+        long waitMs;
+
+        Command(StepType t) { type = t; }
+
+        static Command driveTo(double x, double y, double headingDeg, long timeoutMs) {
+            Command c = new Command(StepType.DRIVE_TO);
+            c.x = x; c.y = y; c.headingDeg = headingDeg;
+            c.timeoutMs = timeoutMs;
+            return c;
+        }
+
+        static Command intakeUntilFull(long timeoutMs) {
+            Command c = new Command(StepType.INTAKE_UNTIL_FULL);
+            c.timeoutMs = timeoutMs;
+            return c;
+        }
+
+        static Command alignToTag(long timeoutMs) {
+            Command c = new Command(StepType.ALIGN_TO_TAG);
+            c.timeoutMs = timeoutMs;
+            return c;
+        }
+
+        static Command shootMotif(long timeoutMs) {
+            Command c = new Command(StepType.SHOOT_MOTIF);
+            c.timeoutMs = timeoutMs;
+            return c;
+        }
+
+        static Command waitMs(long waitMs) {
+            Command c = new Command(StepType.WAIT);
+            c.waitMs = waitMs;
+            return c;
+        }
+
+        static Command done() { return new Command(StepType.DONE); }
+    }
+
+    private static class PoseEstimate {
+        final double x, y, headingDeg;
+        PoseEstimate(double x, double y, double headingDeg) {
+            this.x = x; this.y = y; this.headingDeg = headingDeg;
+        }
+    }
+
+    private int seqIndex = 0;
+    private long stepStartMs = 0;
+
+    // Botpose-drive tuning (meters, degrees)
+    private static final double KP_XY = 1.2;
+    private static final double KP_H  = 0.02;
 
     private static final double MAX_DRIVE_POWER  = 0.55;
     private static final double MAX_STRAFE_POWER = 0.55;
     private static final double MAX_TURN_POWER   = 0.35;
 
-    // "Arrived" tolerances
-    private static final double POS_TOL_M  = 0.05;  // 5 cm
-    private static final double ANG_TOL_DEG = 3.0;  // degrees
+    private static final double POS_TOL_M    = 0.05;
+    private static final double ANG_TOL_DEG  = 3.0;
 
-    // Safety timeout per waypoint
-    private static final long WAYPOINT_TIMEOUT_MS = 5000;
-    // ------------------------------------------------
-
-    // ====== PUT YOUR TARGETS HERE (meters, meters, degrees) ======
-    // Example: go to (x=1.20m, y=0.40m, heading=90deg)
-    private final Waypoint[] path = new Waypoint[] {
-            new Waypoint(1.20, 0.40, 90),
-            new Waypoint(1.20, 0.90, 90),
-            new Waypoint(0.60, 0.90, 180),
+    // ===== EDIT YOUR SEQUENCE HERE =====
+    // Units: x,y in METERS (botpose), heading in DEGREES
+    private final Command[] sequence = new Command[] {
+            Command.driveTo(0.0, 0.0, -45, 5000),
+            //Command.driveTo(0.0, 0.0, -100, 5000),
+            Command.alignToTag(3000),
+            //Command.intakeUntilFull(8000),
+            //Command.driveTo(1.60, 0.60, 90, 5000),
+            //Command.alignToTag(3000),
+            //Command.shootMotif(5000),
+            //Command.waitMs(250),
+            Command.done()
     };
-    // ============================================================
+    // ===================================
 
     @Override
     public void runOpMode() {
-
-        // --- hardware map ---
-        motor0 = hardwareMap.get(DcMotor.class, "motor0"); // front right (per your drive2)
-        motor1 = hardwareMap.get(DcMotor.class, "motor1"); // back left
-        motor2 = hardwareMap.get(DcMotor.class, "motor2"); // front left
-        motor3 = hardwareMap.get(DcMotor.class, "motor3"); // back right
-
         initLimelight();
 
-        telemetry.addLine("BotposeGoToCoordinates ready.");
-        telemetry.addLine("Make sure Limelight localization is enabled and botpose is non-null.");
+        telemetry.addLine("USE_THIS_ONE_Auto ready.");
+        telemetry.addLine("Press START to run the programmed sequence.");
+        telemetry.addLine("Press BACK to cancel to manual drive.");
         telemetry.update();
+
+        // Hardware map
+        motor0 = hardwareMap.get(DcMotor.class, "motor0");
+        motor1 = hardwareMap.get(DcMotor.class, "motor1");
+        motor2 = hardwareMap.get(DcMotor.class, "motor2");
+        motor3 = hardwareMap.get(DcMotor.class, "motor3");
+        motor0b = hardwareMap.get(DcMotor.class, "motor0b");
+        motor1b = hardwareMap.get(DcMotor.class, "motor1b");
+        motor2b = hardwareMap.get(DcMotor.class, "motor2b");
+
+        servo0 = hardwareMap.get(Servo.class, "servo0");
+        servo1 = hardwareMap.get(CRServo.class, "servo1");
+        servo2 = hardwareMap.get(Servo.class, "servo2");
+
+        laser = hardwareMap.get(AnalogInput.class, "laser");
+
+        imu1 = hardwareMap.get(BNO055IMU.class, "imu 1");
+
+        ballColor = hardwareMap.get(NormalizedColorSensor.class, "ballColor");
+
+        mag0 = hardwareMap.get(DigitalChannel.class, "mag0");
+        mag1 = hardwareMap.get(DigitalChannel.class, "mag1");
+        mag2 = hardwareMap.get(DigitalChannel.class, "mag2");
+        mag3 = hardwareMap.get(DigitalChannel.class, "mag3");
+
+        // Motor directions/modes
+        motor0.setDirection(DcMotor.Direction.FORWARD);
+        motor1.setDirection(DcMotor.Direction.FORWARD);
+        motor2.setDirection(DcMotor.Direction.FORWARD);
+        motor3.setDirection(DcMotor.Direction.FORWARD);
+
+        motor0.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        motor1.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        motor2.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        motor3.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+
+        motor0.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor1.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor2.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor3.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        motor0b.setDirection(DcMotor.Direction.REVERSE);
+        motor1b.setDirection(DcMotor.Direction.FORWARD);
+        motor2b.setDirection(DcMotorSimple.Direction.FORWARD);
+
+        motor0b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        motor1b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        motor2b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+
+        motor0b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor1b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor2b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+
+        // Servo init
+        servo0.setPosition(KICK_RETRACT_POS);
+        servo2.setPosition(servo2Pos);
+        lastServo2Time = getRuntime();
+
+        // IMU init
+        BNO055IMU.Parameters imuParameters = new BNO055IMU.Parameters();
+        imuParameters.angleUnit = BNO055IMU.AngleUnit.DEGREES;
+        imuParameters.accelUnit = BNO055IMU.AccelUnit.METERS_PERSEC_PERSEC;
+        imuParameters.loggingEnabled = false;
+        imu1.initialize(imuParameters);
+
+        // Enable sensor light if present
+        if (ballColor instanceof SwitchableLight) {
+            ((SwitchableLight) ballColor).enableLight(true);
+        }
+
+        // Default to SEQUENCE mode at start of Auto (you can still cancel to manual)
+        controlMode = ControlMode.SEQUENCE;
+        seqIndex = 0;
+        stepStartMs = System.currentTimeMillis();
 
         waitForStart();
 
-        // Optional: wait briefly until botpose exists
-        long startWait = System.currentTimeMillis();
-        while (opModeIsActive() && getBotpose() == null && System.currentTimeMillis() - startWait < 1500) {
-            telemetry.addLine("Waiting for botpose...");
-            telemetry.update();
-            idle();
-        }
+        while (opModeIsActive()) {
 
-        if (!opModeIsActive()) return;
+            // Cancel sequence if needed
+            if (gamepad1.back && controlMode == ControlMode.SEQUENCE) cancelSequence();
 
-        // Run your waypoint list
-        for (int i = 0; i < path.length && opModeIsActive(); i++) {
-            telemetry.addData("Waypoint", "%d / %d", i + 1, path.length);
-            telemetry.update();
+            // Always update LL telemetry + latch motif/distance
+            getData();
+            telemetryLimeLight();
 
-            boolean ok = driveToWaypoint(path[i], WAYPOINT_TIMEOUT_MS);
-
-            stopDrive();
-            sleep(150);
-
-            if (!ok) {
-                telemetry.addLine("Failed/Timed out on waypoint. Stopping auto.");
-                telemetry.update();
-                break;
+            if (controlMode == ControlMode.SEQUENCE) {
+                runSequence();
+            } else {
+                // Manual driving allowed if you cancel
+                sticks1();
+                buttons();
+                updateBallColor();
+                merryGoRoundIntake();
+                telemetryBallColor();
             }
-        }
 
-        stopDrive();
+            // Laser telemetry
+            double v = laser.getVoltage();
+            double mm = (v / 3.3) * 1000.0;
+            double inches = mm / 25.4;
+            telemetry.addData("Laser Dist", "%.0f mm  (%.1f in)", mm, inches);
+
+            telemetry.addData("MODE", controlMode);
+            telemetry.update();
+        }
     }
 
-    // -------------------- Core Auto Logic --------------------
-
-    private boolean driveToWaypoint(Waypoint target, long timeoutMs) {
-        long start = System.currentTimeMillis();
-
-        while (opModeIsActive() && (System.currentTimeMillis() - start) < timeoutMs) {
-
-            PoseEstimate cur = getPoseEstimate();
-            if (cur == null) {
-                stopDrive();
-                telemetry.addLine("botpose is null - can’t navigate.");
-                telemetry.update();
-                return false;
-            }
-
-            // Field error (meters, degrees)
-            double dx = target.x - cur.x;
-            double dy = target.y - cur.y;
-            double dh = angleWrapDeg(target.headingDeg - cur.headingDeg);
-
-            double dist = Math.hypot(dx, dy);
-
-            // Arrived?
-            if (dist <= POS_TOL_M && Math.abs(dh) <= ANG_TOL_DEG) {
-                telemetry.addLine("Arrived!");
-                telemetry.update();
-                return true;
-            }
-
-            // Convert FIELD error -> ROBOT frame using current heading
-            // Assumption: headingDeg is field heading, 0 aligned with +X.
-            // If your axes feel swapped/inverted, see notes at bottom.
-            double hRad = Math.toRadians(cur.headingDeg);
-            double robotForward =  dx * Math.cos(hRad) + dy * Math.sin(hRad);
-            double robotLeft    = -dx * Math.sin(hRad) + dy * Math.cos(hRad);
-
-            // P control -> power
-            double drive  = clip(robotForward * KP_XY,  -MAX_DRIVE_POWER,  MAX_DRIVE_POWER);
-            double strafe = clip(robotLeft    * KP_XY,  -MAX_STRAFE_POWER, MAX_STRAFE_POWER);
-            double turn   = clip(dh * KP_H,           -MAX_TURN_POWER,   MAX_TURN_POWER);
-
-            // Send to your mecanum mixer
-            setDrivePower(drive, strafe, turn);
-
-            telemetry.addData("CUR (m,deg)", "x=%.3f y=%.3f h=%.1f", cur.x, cur.y, cur.headingDeg);
-            telemetry.addData("TGT (m,deg)", "x=%.3f y=%.3f h=%.1f", target.x, target.y, target.headingDeg);
-            telemetry.addData("ERR", "dx=%.3f dy=%.3f dist=%.3f dh=%.1f", dx, dy, dist, dh);
-            telemetry.addData("CMD", "drive=%.2f strafe=%.2f turn=%.2f", drive, strafe, turn);
-            telemetry.update();
-
-            idle();
-        }
-
-        stopDrive();
-        return false; // timeout
-    }
-
-    // -------------------- Limelight Helpers --------------------
-
+    // -------------------- Limelight --------------------
     private void initLimelight() {
         limelight = hardwareMap.get(Limelight3A.class, "limelight");
         telemetry.setMsTransmissionInterval(11);
@@ -156,60 +339,200 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         limelight.start();
     }
 
-    private Pose3D getBotpose() {
+    private void telemetryLimeLight() {
+        LLResult result = limelight.getLatestResult();
+
+        if (result == null) {
+            telemetry.addLine("LLResult = null");
+            return;
+        }
+
+        telemetryTagMotifs(result);
+        updateLatchedMotif(result);
+        telemetry.addData("Stored Tag Colors", "%s (Tag %d)", latchedMotif, latchedTagId);
+
+        Pose3D targetCam = getBestTagPoseCameraSpace(result);
+        if (targetCam != null) {
+            double xIn = targetCam.getPosition().x * 39.37;
+            double yIn = targetCam.getPosition().y * 39.37;
+            double zIn = targetCam.getPosition().z * 39.37;
+
+            double distTag = Math.sqrt(xIn * xIn + yIn * yIn + zIn * zIn);
+            lastTagDistanceIn = distTag;
+            telemetry.addData("Distance from tag (in)", "%.1f", distTag);
+        } else {
+            lastTagDistanceIn = -1;
+            telemetry.addLine("TagCam: none");
+        }
+
+        Pose3D botpose = result.getBotpose();
+        if (botpose == null) {
+            telemetry.addLine("botpose = null (localization not producing pose)");
+            return;
+        }
+
+        double x = botpose.getPosition().x;
+        double y = botpose.getPosition().y;
+        double z = botpose.getPosition().z;
+
+        telemetry.addData("Botpose x,y,z (m)", "(%.3f, %.3f, %.3f)", x, y, z);
+    }
+
+    // -------------------- Sequence Engine --------------------
+    private void cancelSequence() {
+        controlMode = ControlMode.MANUAL;
+        stopDrive();
+        alignActive = false;
+    }
+
+    private void runSequence() {
+        if (seqIndex >= sequence.length) {
+            controlMode = ControlMode.MANUAL;
+            stopDrive();
+            return;
+        }
+
+        Command cmd = sequence[seqIndex];
+        long elapsed = System.currentTimeMillis() - stepStartMs;
+
+        telemetry.addData("SEQ", "Step %d/%d  %s  t=%dms",
+                (seqIndex + 1), sequence.length, cmd.type, elapsed);
+
+        boolean stepDone = false;
+
+        switch (cmd.type) {
+            case DRIVE_TO: {
+                boolean arrived = driveToBotpose(cmd.x, cmd.y, cmd.headingDeg);
+                if (arrived) stepDone = true;
+
+                if (elapsed > cmd.timeoutMs) {
+                    telemetry.addLine("DRIVE_TO timeout -> cancel");
+                    cancelSequence();
+                    return;
+                }
+                break;
+            }
+
+            case INTAKE_UNTIL_FULL: {
+                updateBallColor();
+                merryGoRoundIntake();
+                telemetryBallColor();
+
+                if (allSlotsLoaded()) stepDone = true;
+
+                if (elapsed > cmd.timeoutMs) {
+                    telemetry.addLine("INTAKE timeout -> continuing");
+                    stepDone = true;
+                }
+                break;
+            }
+
+            case ALIGN_TO_TAG: {
+                boolean aligned = alignToTarget();
+                if (aligned) stepDone = true;
+
+                if (elapsed > cmd.timeoutMs) {
+                    telemetry.addLine("ALIGN timeout -> cancel");
+                    cancelSequence();
+                    return;
+                }
+                break;
+            }
+
+            case SHOOT_MOTIF: {
+                adjustShooterAndFire();
+                stepDone = true;
+                break;
+            }
+
+            case WAIT: {
+                stopDrive();
+                if (elapsed >= cmd.waitMs) stepDone = true;
+                break;
+            }
+
+            case DONE: {
+                stopDrive();
+                controlMode = ControlMode.MANUAL;
+                return;
+            }
+        }
+
+        if (stepDone) {
+            stopDrive();
+            sleep(120);
+            seqIndex++;
+            stepStartMs = System.currentTimeMillis();
+        }
+    }
+
+    // -------------------- Botpose drive --------------------
+    private boolean driveToBotpose(double targetX, double targetY, double targetHeadingDeg) {
+
+        PoseEstimate cur = getPoseEstimate();
+        if (cur == null) {
+            stopDrive();
+            telemetry.addLine("botpose null -> can't navigate");
+            return false;
+        }
+
+        double dx = targetX - cur.x;
+        double dy = targetY - cur.y;
+        double dh = angleWrapDeg(targetHeadingDeg - cur.headingDeg);
+
+        double dist = Math.hypot(dx, dy);
+
+        boolean posOk = dist <= POS_TOL_M;
+        boolean angOk = Math.abs(dh) <= ANG_TOL_DEG;
+
+        if (posOk && angOk) {
+            stopDrive();
+            return true;
+        }
+
+        // FIELD error -> ROBOT frame
+        double hRad = Math.toRadians(cur.headingDeg);
+        double robotForward =  dx * Math.cos(hRad) + dy * Math.sin(hRad);
+        double robotLeft    = -dx * Math.sin(hRad) + dy * Math.cos(hRad);
+
+        double drive  = clip(robotForward * KP_XY, -MAX_DRIVE_POWER,  MAX_DRIVE_POWER);
+        double strafe = clip(robotLeft    * KP_XY, -MAX_STRAFE_POWER, MAX_STRAFE_POWER);
+        double turn   = clip(dh * KP_H,          -MAX_TURN_POWER,    MAX_TURN_POWER);
+
+        setDrivePower(drive, strafe, turn);
+
+        telemetry.addData("BOTPOSE", "x=%.3f y=%.3f h=%.1f", cur.x, cur.y, cur.headingDeg);
+        telemetry.addData("TARGET",  "x=%.3f y=%.3f h=%.1f", targetX, targetY, targetHeadingDeg);
+        telemetry.addData("ERR",     "dx=%.3f dy=%.3f dist=%.3f dh=%.1f", dx, dy, dist, dh);
+
+        return false;
+    }
+
+    private PoseEstimate getPoseEstimate() {
         LLResult result = limelight.getLatestResult();
         if (result == null) return null;
 
         Pose3D botpose = result.getBotpose();
-        return botpose; // can be null if localization not ready
-    }
+        if (botpose == null) return null;
 
-    private PoseEstimate getPoseEstimate() {
-        Pose3D p = getBotpose();
-        if (p == null) return null;
+        double x = botpose.getPosition().x; // meters
+        double y = botpose.getPosition().y; // meters
 
-        double x = p.getPosition().x; // meters
-        double y = p.getPosition().y; // meters
-
-        // Try to read yaw from Pose3D orientation.
-        // Different FTC versions name this slightly differently; if this line errors,
-        // tell me the exact error and I’ll adjust to your SDK.
-        double headingDeg = p.getOrientation().getYaw(AngleUnit.DEGREES);
+        // If your SDK errors here, paste the exact error and I’ll swap the getter.
+        double headingDeg = botpose.getOrientation().getYaw(AngleUnit.DEGREES);
 
         return new PoseEstimate(x, y, headingDeg);
     }
 
-    // -------------------- Drive (same mixing idea as your TeleOp) --------------------
-
-    /**
-     * drive  = +forward
-     * strafe = +left   (if it feels reversed, flip sign here)
-     * turn   = +CCW
-     */
     private void setDrivePower(double drive, double strafe, double turn) {
-        // Your TeleOp had correctedStrafePower = -strafePower
-        // so we keep that behavior here:
-        double correctedStrafe = -strafe;
+        double correctedStrafe = -strafe; // matches your TeleOp
         double correctedDrive  = drive;
 
-        // Front right motor0
         motor0.setPower((correctedDrive - correctedStrafe) - turn);
-        // Back left motor1
-        motor1.setPower((correctedDrive + correctedStrafe) - turn);
-        // Front left motor2
         motor2.setPower((correctedDrive + correctedStrafe) + turn);
-        // Back right motor3
         motor3.setPower((correctedDrive - correctedStrafe) + turn);
+        motor1.setPower((correctedDrive + correctedStrafe) - turn);
     }
-
-    private void stopDrive() {
-        motor0.setPower(0);
-        motor1.setPower(0);
-        motor2.setPower(0);
-        motor3.setPower(0);
-    }
-
-    // -------------------- Small utils --------------------
 
     private static double clip(double v, double lo, double hi) {
         return Math.max(lo, Math.min(hi, v));
@@ -221,21 +544,392 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         return deg;
     }
 
-    // -------------------- Data classes --------------------
+    // -------------------- Align --------------------
+    private boolean alignToTarget() {
+        LLResult result = limelight.getLatestResult();
+        if (result != null && result.isValid()) {
+            double tx = result.getTx();
 
-    private static class Waypoint {
-        final double x, y;
-        final double headingDeg;
-        Waypoint(double x, double y, double headingDeg) {
-            this.x = x; this.y = y; this.headingDeg = headingDeg;
+            if (Math.abs(tx) <= ALIGN_TOLERANCE) {
+                stopDrive();
+                telemetry.addData("Alignment", "Aligned!");
+                return true;
+            }
+
+            double turnPower = Math.max(-ALIGN_MAX_POWER,
+                    Math.min(ALIGN_MAX_POWER, tx * ALIGN_KP));
+
+            // rotate only
+            setDrivePower(0, 0, turnPower);
+
+            telemetry.addData("Aligning", "tx=%.2f  power=%.2f", tx, turnPower);
+            return false;
+        } else {
+            telemetry.addData("Alignment", "No target detected");
+            stopDrive();
+            return false;
         }
     }
 
-    private static class PoseEstimate {
-        final double x, y;
-        final double headingDeg;
-        PoseEstimate(double x, double y, double headingDeg) {
-            this.x = x; this.y = y; this.headingDeg = headingDeg;
+    // -------------------- Shooter + motif firing --------------------
+    private void adjustShooterAndFire() {
+
+        if (!motifLatched || latchedMotif == null || latchedMotif.length() != 3 || "UNKNOWN".equals(latchedMotif)) {
+            telemetry.addLine("Shooter: No valid motif latched");
+            return;
         }
+        if (!allSlotsLoaded()) {
+            telemetry.addLine("Shooter: Slots not all loaded yet");
+            telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
+            return;
+        }
+        if (lastTagDistanceIn <= 0) {
+            telemetry.addLine("Shooter: No tag distance");
+            return;
+        }
+
+        double distanceInches = lastTagDistanceIn;
+        double normalized = Math.max(0, Math.min(1,
+                (distanceInches - SHOOTER_MIN_DIST) / (SHOOTER_MAX_DIST - SHOOTER_MIN_DIST)));
+
+        double servoAngle = SERVO_MAX_ANGLE - (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) * normalized;
+        servo2.setPosition(servoAngle);
+
+        telemetry.addData("Motif", latchedMotif);
+        telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
+        telemetry.addData("Dist(in)", "%.1f", distanceInches);
+        telemetry.addData("Shooter Angle", "%.2f", servoAngle);
+        telemetry.update();
+
+        for (int i = 0; i < 3; i++) slotFired[i] = false;
+
+        char[] order = latchedMotif.toCharArray();
+
+        for (int shotIndex = 0; shotIndex < 3 && opModeIsActive(); shotIndex++) {
+            char wanted = order[shotIndex];
+
+            int slotToShoot = findSlotForColor(wanted);
+            if (slotToShoot < 0) {
+                telemetry.addData("Shooter", "Missing color '%c' in slots (or already used)", wanted);
+                telemetry.update();
+                return;
+            }
+
+            telemetry.addData("Shooting", "shot %d wants %c -> slot %d", shotIndex, wanted, slotToShoot);
+            telemetry.update();
+
+            rotateToSlotBlocking(slotToShoot);
+
+            // Fire ONE ball using kicker servo0
+            servo0.setPosition(KICK_EXTEND_POS);
+            sleep(KICK_DURATION_MS);
+            servo0.setPosition(KICK_RETRACT_POS);
+
+            slotFired[slotToShoot] = true;
+            sleep(120);
+        }
+
+        telemetry.addLine("Shoot sequence done!");
+    }
+
+    private boolean allSlotsLoaded() {
+        return slots[0] != null && slots[1] != null && slots[2] != null;
+    }
+
+    private int findSlotForColor(char wanted) {
+        String w = String.valueOf(wanted);
+        for (int i = 0; i < 3; i++) {
+            if (!slotFired[i] && w.equals(slots[i])) return i;
+        }
+        return -1;
+    }
+
+    private boolean atShootSlot(int slot) {
+        switch (slot) {
+            case 0: return atShootSlot0();
+            case 1: return atShootSlot1();
+            case 2: return atShootSlot2();
+            default: return false;
+        }
+    }
+
+    private void rotateToSlotBlocking(int targetSlot) {
+        long start = System.currentTimeMillis();
+        servo1.setPower(MGR_POWER);
+
+        while (opModeIsActive() && !atShootSlot(targetSlot)
+                && (System.currentTimeMillis() - start) < MGR_MOVE_TIMEOUT_MS) {
+
+            telemetry.addData("Rotating to shoot slot", targetSlot);
+            telemetry.addData("Mag2", mag2.getState());
+            telemetry.addData("Mag3", mag3.getState());
+            telemetry.update();
+            idle();
+        }
+
+        servo1.setPower(0);
+    }
+
+    // -------------------- Tag motifs --------------------
+    private String decodeMotifFromTagId(int tagId) {
+        switch (tagId) {
+            case 21:  return "gpp";
+            case 22:  return "pgp";
+            case 23:  return "ppg";
+            default: return "UNKNOWN";
+        }
+    }
+
+    private void updateLatchedMotif(LLResult result) {
+        if (motifLatched) return;
+        if (result == null || !result.isValid()) return;
+
+        List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
+        if (tags == null || tags.isEmpty()) return;
+
+        LLResultTypes.FiducialResult best = tags.get(0);
+        for (LLResultTypes.FiducialResult t : tags) {
+            if (t.getTargetArea() > best.getTargetArea()) best = t;
+        }
+
+        int id = best.getFiducialId();
+        String motif = decodeMotifFromTagId(id);
+
+        if (!"UNKNOWN".equals(motif)) {
+            motifLatched = true;
+            latchedTagId = id;
+            latchedMotif = motif;
+        }
+    }
+
+    private void telemetryTagMotifs(LLResult result) {
+        if (result == null || !result.isValid()) {
+            telemetry.addLine("Tags: none (no valid LL result)");
+            return;
+        }
+
+        List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
+        if (tags == null || tags.isEmpty()) {
+            telemetry.addLine("Tags: none detected");
+            return;
+        }
+
+        telemetry.addData("Tags Detected", tags.size());
+        for (int i = 0; i < tags.size(); i++) {
+            LLResultTypes.FiducialResult t = tags.get(i);
+            int id = t.getFiducialId();
+            String motif = decodeMotifFromTagId(id);
+            telemetry.addData("April Tag Motif", motif);
+        }
+    }
+
+    private Pose3D getBestTagPoseCameraSpace(LLResult result) {
+        if (result == null || !result.isValid()) return null;
+
+        List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
+        if (tags == null || tags.isEmpty()) return null;
+
+        LLResultTypes.FiducialResult best = tags.get(0);
+        for (LLResultTypes.FiducialResult t : tags) {
+            if (t.getTargetArea() > best.getTargetArea()) best = t;
+        }
+
+        return best.getTargetPoseCameraSpace();
+    }
+
+    // -------------------- Ball color + intake --------------------
+    private void telemetryBallColor() {
+        NormalizedRGBA c = ballColor.getNormalizedColors();
+        float[] hsv = new float[3];
+        Color.RGBToHSV((int) (c.red * 255), (int) (c.green * 255), (int) (c.blue * 255), hsv);
+
+        telemetry.addData("BallHue", "%.0f", hsv[0]);
+        telemetry.addData("Ball HSV", "H=%.0f S=%.2f V=%.2f", hsv[0], hsv[1], hsv[2]);
+        telemetry.addData("Ball RGB", "r=%.2f g=%.2f b=%.2f", c.red, c.green, c.blue);
+        telemetry.addData("Ball", ballColorValue);
+    }
+
+    private void updateBallColor() {
+        NormalizedRGBA c = ballColor.getNormalizedColors();
+
+        float[] hsv = new float[3];
+        Color.RGBToHSV(
+                (int) (c.red * 255),
+                (int) (c.green * 255),
+                (int) (c.blue * 255),
+                hsv
+        );
+
+        float hue = hsv[0];
+        float sat = hsv[1];
+        float val = hsv[2];
+
+        boolean confident = (sat > 0.15) && (val > 0.05);
+
+        if (confident && (hue >= 120 && hue <= 180)) {
+            ballColorValue = "g";
+        } else if (confident && (hue >= 210 && hue <= 255)) {
+            ballColorValue = "p";
+        } else {
+            ballColorValue = null;
+        }
+    }
+
+    private boolean colorSeen() {
+        return ballColorValue != null && !ballColorValue.isEmpty();
+    }
+
+    // Slot detectors
+    private boolean atSlot0() { return !mag0.getState() && !mag1.getState(); }
+    private boolean atSlot1() { return !mag0.getState() &&  mag1.getState(); }
+    private boolean atSlot2() { return  mag0.getState() && !mag1.getState(); }
+
+    // SHOOTER slot detectors (mag2/mag3)
+    private boolean atShootSlot0() { return !mag2.getState() && !mag3.getState(); }
+    private boolean atShootSlot1() { return !mag2.getState() &&  mag3.getState(); }
+    private boolean atShootSlot2() { return  mag2.getState() && !mag3.getState(); }
+
+    private void assignSlot(int slotNumber) {
+        slots[slotNumber] = ballColorValue;
+    }
+
+    private void merryGoRoundIntake() {
+        boolean seen = colorSeen();
+        boolean newColorEvent = seen && !colorLatched;
+        if (seen) colorLatched = true;
+        else colorLatched = false;
+
+        switch (intakeState) {
+            case INIT_TO_SLOT0:
+                servo1.setPower(1);
+                if (atSlot0()) {
+                    servo1.setPower(0);
+                    intakeState = INTAKEState.WAIT_COLOR_0;
+                }
+                break;
+
+            case WAIT_COLOR_0:
+                servo1.setPower(0);
+                if (newColorEvent) {
+                    assignSlot(0);
+                    intakeState = INTAKEState.MOVE_TO_SLOT1;
+                }
+                break;
+
+            case MOVE_TO_SLOT1:
+                servo1.setPower(1);
+                if (atSlot1()) {
+                    servo1.setPower(0);
+                    intakeState = INTAKEState.WAIT_COLOR_1;
+                }
+                break;
+
+            case WAIT_COLOR_1:
+                servo1.setPower(0);
+                if (newColorEvent) {
+                    assignSlot(1);
+                    intakeState = INTAKEState.MOVE_TO_SLOT2;
+                }
+                break;
+
+            case MOVE_TO_SLOT2:
+                servo1.setPower(1);
+                if (atSlot2()) {
+                    servo1.setPower(0);
+                    intakeState = INTAKEState.WAIT_COLOR_2;
+                }
+                break;
+
+            case WAIT_COLOR_2:
+                servo1.setPower(0);
+                if (newColorEvent) {
+                    assignSlot(2);
+                    intakeState = INTAKEState.DONE;
+                }
+                break;
+
+            case DONE:
+                servo1.setPower(0);
+                break;
+        }
+
+        telemetry.addData("Intake State", intakeState);
+        telemetry.addData("BallColor", ballColorValue);
+        telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
+    }
+
+    // -------------------- Manual driving (only if you cancel) --------------------
+    private void buttons() {
+        double now = getRuntime();
+        double dt = now - lastServo2Time;
+        lastServo2Time = now;
+        dt = Math.max(0, Math.min(0.1, dt));
+
+        if (gamepad2.dpad_up) {
+            servo2Pos += SERVO2_RATE * dt;
+        } else if (gamepad2.dpad_down) {
+            servo2Pos -= SERVO2_RATE * dt;
+        }
+
+        servo2Pos = Math.max(SERVO2_MIN, Math.min(SERVO2_MAX, servo2Pos));
+        servo2.setPosition(servo2Pos);
+        telemetry.addData("Shooter Position", "%.3f", servo2.getPosition());
+    }
+
+    private void sticks1() {
+        RSX = -gamepad1.right_stick_x;
+        LSY = gamepad1.left_stick_y;
+        LSX = gamepad1.left_stick_x;
+        sticks2();
+    }
+
+    private void sticks2() {
+        double gain = gamepad1.left_bumper ? 1.0 : 0.5;
+        strafePower = gain * LSX;
+        drivePower  = gain * LSY;
+        rotatePower = gain * RSX;
+        sticks4();
+    }
+
+    private void sticks4() {
+        correctedStrafePower = -strafePower;
+        correctedDrivePower = drivePower;
+        drive2();
+    }
+
+    private void drive2() {
+        motor0.setPower((correctedDrivePower - correctedStrafePower) - rotatePower);
+        motor2.setPower((correctedDrivePower + correctedStrafePower) + rotatePower);
+        motor3.setPower((correctedDrivePower - correctedStrafePower) + rotatePower);
+        motor1.setPower((correctedDrivePower + correctedStrafePower) - rotatePower);
+    }
+
+    // -------------------- Misc --------------------
+    private void stopDrive() {
+        motor0.setPower(0);
+        motor1.setPower(0);
+        motor2.setPower(0);
+        motor3.setPower(0);
+    }
+
+    private void getData() {
+        double mps0 = motor0.getCurrentPosition();
+        double mps1 = motor1.getCurrentPosition();
+        double mps2 = motor2.getCurrentPosition();
+        double mps3 = motor3.getCurrentPosition();
+
+        double mpw0 = motor0.getPower();
+        double mpw1 = motor1.getPower();
+        double mpw2 = motor2.getPower();
+        double mpw3 = motor3.getPower();
+
+        double mv0 = ((DcMotorEx) motor0).getVelocity();
+        double mv1 = ((DcMotorEx) motor1).getVelocity();
+        double mv2 = ((DcMotorEx) motor2).getVelocity();
+        double mv3 = ((DcMotorEx) motor3).getVelocity();
+
+        telemetry.addData("M Pos", "(%.1f, %.1f, %.1f, %.1f)", mps0, mps1, mps2, mps3);
+        telemetry.addData("M Power", "(%.1f, %.1f, %.1f, %.1f)", mpw0, mpw1, mpw2, mpw3);
+        telemetry.addData("M Velocity", "(%.1f, %.1f, %.1f, %.1f)", mv0, mv1, mv2, mv3);
     }
 }

@@ -29,13 +29,13 @@ import java.util.List;
 @TeleOp(name = "Broadwater Robotics TeleOp")
 public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
-    private DcMotor motor0;
-    private DcMotor motor1;
-    private DcMotor motor2;
-    private DcMotor motor3;
-    private DcMotor motor0b;
-    private DcMotor motor1b;
-    private DcMotor motor2b;
+    private DcMotor motor0; // Drive FR
+    private DcMotor motor1; // Drive BL
+    private DcMotor motor2; // Drive FL
+    private DcMotor motor3; // Drive BR
+    private DcMotor motor0b; // Shooter 1
+    private DcMotor motor1b; // Shooter 2
+    private DcMotor motor2b; // Intake
     private Servo servo0; // Kicker
     private CRServo servo1; // Merry Go Round Tray
     private Servo servo2; // Shooter Angle
@@ -43,10 +43,10 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private DigitalChannel blueLED;
     private DigitalChannel redLED;
     private AnalogInput laser;
-    private DigitalChannel mag0;
-    private DigitalChannel mag1;
-    private DigitalChannel mag2;
-    private DigitalChannel mag3;
+    private DigitalChannel mag0; // Intake Magnet 0
+    private DigitalChannel mag1; // Intake Magnet 1
+    private DigitalChannel mag2; // Intake Magnet 2
+    private DigitalChannel mag3; // Intake Magnet 2
 
     // Limelight alignment control
     private static final double ALIGN_KP = 0.03;
@@ -66,6 +66,16 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private static final double KICK_EXTEND_POS = 1.0;
     private static final double KICK_RETRACT_POS = 0.0;
     private static final long   KICK_DURATION_MS = 350;  // how long to stay extended
+
+    // --- Kicker tuning ---
+    private static final int  KICK_TAPS = 2;          // double tap
+    private static final long KICK_GAP_MS = 140;      // time between taps
+    private static final long KICK_RETRACT_PAUSE_MS = 90; // pause after retract before next tap
+
+    // --- Dry fire mode ---
+    private boolean dryFireMode = false;
+    private boolean wasDryToggle = false;
+    private boolean wasDryFire = false;
     
     private NormalizedColorSensor ballColor;
 
@@ -206,7 +216,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 getData();
                 telemetryLimeLight();
                 // Press A to start auto-align & shoot
-                if (gamepad1.a && !alignActive) {
+                if (!dryFireMode && gamepad1.a && !alignActive) {
                     alignActive = true;
                 }
 
@@ -227,11 +237,11 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 updateBallColor();
                 merryGoRoundIntake();
                 telemetryBallColor();
-                /* TURN BACK ON
+
                 motor0b.setPower(1);
                 motor1b.setPower(1);
                 motor2b.setPower(1);
-                 */
+
 
                 double v = laser.getVoltage();        // 0.0 to ~3.3V
                 double mm = (v / 3.3) * 1000.0;       // 0–1000mm mapped to 0–3.3V :contentReference[oaicite:3]{index=3}
@@ -373,9 +383,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
             rotateToSlotBlocking(slotToShoot);
 
             // Fire one ball
-            servo2.setPosition(KICK_EXTEND_POS);
-            sleep(KICK_DURATION_MS);
-            servo2.setPosition(KICK_RETRACT_POS);
+            kickDoubleTap();
 
             // Mark used
             slotFired[slotToShoot] = true;
@@ -670,7 +678,18 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         telemetry.addData("BallColor", ballColorValue);
         telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
     }
+    private void kickDoubleTap() {
+        for (int i = 0; i < KICK_TAPS && opModeIsActive(); i++) {
+            servo0.setPosition(KICK_EXTEND_POS);
+            sleep(KICK_DURATION_MS);
 
+            servo0.setPosition(KICK_RETRACT_POS);
+            sleep(KICK_RETRACT_PAUSE_MS);
+
+            // gap between taps (only if another tap is coming)
+            if (i < KICK_TAPS - 1) sleep(KICK_GAP_MS);
+        }
+    }
     private void buttons() {
         double now = getRuntime();
         double dt = now - lastServo2Time;
@@ -688,14 +707,6 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         servo2.setPosition(servo2Pos);
         telemetry.addData("Shooter Position", "%.3f", servo2.getPosition());
 
-        if (gamepad2.dpad_left) {
-            motor0b.setPower(0);
-            motor1b.setPower(0);
-        } else {
-            //TURN BACK ON
-            //motor0b.setPower(1);
-            //motor1b.setPower(1);
-        }
 
         if (gamepad2.x) {
             //servo1.setPower(1.0); // Move up
@@ -704,7 +715,21 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         } else {
            //servo1.setPower(0); // Stop motor
         }
+        // --- Dry Fire Mode toggle (REV controller safe) ---
+        if (gamepad2.y && !wasDryToggle) {
+            dryFireMode = !dryFireMode;
+        }
+        wasDryToggle = gamepad2.y;
 
+        telemetry.addData("DryFireMode", dryFireMode ? "ON" : "OFF");
+
+        // --- Dry Fire kick (double tap) ---
+        if (dryFireMode) {
+            if (gamepad2.a && !wasDryFire) {
+                kickDoubleTap();
+            }
+            wasDryFire = gamepad2.a;
+        }
     }
     private void sticks2() {
         double gain;
