@@ -1,3 +1,35 @@
+
+//Gamepad button layout:
+    //triangle = a
+    //circle = b
+    //cross = y
+    //square = x
+
+
+//Controller 1:
+    //circle = leave auto align in case to april tag detected
+    //cross = align to april tag
+    //right stick = strafe
+    //left bumper = turbo
+    //left stick = turn + forward and backward
+
+//Controller 2:
+    //triangle = dry fire release
+    //cross = dry fire servo 2
+    //dpad up + down = servo angle + or - respectively
+
+//Magnet orientation (slot 0s are in position of entrance/exit)
+    //Intake:
+        //slots =  0  | 1  | 2
+        //mag 0 =  on | on | off
+        //mag 1 =  on | off| on
+    //Shooting:
+        //slots =  0  | 1  | 2
+        //mag 0 =  on | on | off
+        //mag 1 =  on | off| on
+
+//Some parts of this code were edited or pulled from chatgpt and from the FtcSim website drive code
+
 package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.hardware.bosch.BNO055IMU;
@@ -672,6 +704,8 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
             case DONE:
                 servo1.setPower(0);
                 break;
+            default:
+                throw new IllegalStateException("Unexpected value: " + intakeState);
         }
 
         telemetry.addData("Intake State", intakeState);
