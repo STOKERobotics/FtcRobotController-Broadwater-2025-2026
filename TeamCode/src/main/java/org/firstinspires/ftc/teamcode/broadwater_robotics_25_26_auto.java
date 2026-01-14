@@ -185,7 +185,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     // ===== EDIT YOUR SEQUENCE HERE =====
     // Units: x,y in METERS (botpose coordinate frame), heading in DEGREES
     private final Command[] sequence = new Command[] {
-            // Try a small move first for tuning:
+            // Try a small move first for tuning
             Command.driveTo(0.30, 0.00, 0, 5000),   // move ~30cm in +X direction of botpose
             Command.alignToTag(3000),
             Command.done()

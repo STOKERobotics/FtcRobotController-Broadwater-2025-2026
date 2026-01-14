@@ -33,9 +33,12 @@
 package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.hardware.bosch.BNO055IMU;
+import com.qualcomm.hardware.bosch.BNO055IMU.Parameters;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
+import com.qualcomm.hardware.rev.Rev9AxisImuOrientationOnRobot;
+import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.CRServo;
@@ -167,8 +170,6 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         telemetry.addData(">", "Touch START to start OpMode");
         telemetry.update();
 
-        BNO055IMU.Parameters imuParameters;
-
         motor0 = hardwareMap.get(DcMotor.class, "motor0");
         motor1 = hardwareMap.get(DcMotor.class, "motor1");
         motor2 = hardwareMap.get(DcMotor.class, "motor2");
@@ -197,7 +198,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         motor0.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
 
-        motor1.setDirection(DcMotor.Direction.FORWARD);
+        motor1.setDirection(DcMotor.Direction.REVERSE);
         motor1.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor1.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
@@ -224,8 +225,13 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
         servo0.setPosition(0);
         //servo1.setDirection(DcMotorSimple.Direction.FORWARD);
+        RevHubOrientationOnRobot orientation =
+                new RevHubOrientationOnRobot(
+                        RevHubOrientationOnRobot.LogoFacingDirection.LEFT,
+                        RevHubOrientationOnRobot.UsbFacingDirection.UP
+                );
 
-        imuParameters = new BNO055IMU.Parameters();
+        Parameters imuParameters = new Parameters();
         imuParameters.angleUnit = BNO055IMU.AngleUnit.DEGREES;
         imuParameters.accelUnit = BNO055IMU.AccelUnit.METERS_PERSEC_PERSEC;
         imuParameters.loggingEnabled = false;
@@ -609,7 +615,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         float sat = hsv[1];
         float val = hsv[2];
 
-        boolean confident = (sat > 0.15) && (val > 0.05);
+        boolean confident = (sat > 0.05) && (val > 0.009);
 
         if(confident && (hue >= 120 && hue <= 180)) {
             ballColorValue = "g";
@@ -777,7 +783,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         strafePower = gain * LSX;
         drivePower = gain * LSY;
         rotatePower = gain * RSX;
-        sticks4();
+        sticks4( );
 
     }
     private void sticks1() {
@@ -788,10 +794,10 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     }
 
         private void sticks4() {
-//            YawValue = Math.round(imu1.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.XYZ, AngleUnit.DEGREES).thirdAngle) * (Math.PI / 180);
-//            correctedStrafePower = strafePower * Math.cos(YawValue / 180 * Math.PI) - drivePower * Math.sin(YawValue / 180 * Math.PI);
-//            correctedDrivePower = drivePower * Math.cos(YawValue / 180 * Math.PI) + strafePower * Math.sin(YawValue / 180 * Math.PI);
-//            drive2();
+            YawValue = Math.round(imu1.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.XYZ, AngleUnit.DEGREES).thirdAngle) * (Math.PI / 180);
+            correctedStrafePower = strafePower * Math.cos(YawValue / 180 * Math.PI) - drivePower * Math.sin(YawValue / 180 * Math.PI);
+            correctedDrivePower = drivePower * Math.cos(YawValue / 180 * Math.PI) + strafePower * Math.sin(YawValue / 180 * Math.PI);
+            drive2();
 
             correctedStrafePower = -strafePower;
             correctedDrivePower = drivePower;

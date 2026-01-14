@@ -3,7 +3,7 @@ package org.firstinspires.ftc.teamcode;
 import com.qualcomm.hardware.bosch.BNO055IMU;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
-import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.CRServo;
@@ -23,11 +23,10 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 
 import java.util.List;
 
-import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 
+@TeleOp(name = "BetterSimpleDriveSource")
 @Disabled
-@Autonomous(name = "Autonomous 1")
-public class Autonomous_part1 extends LinearOpMode {
+public class BetterSimpleDriveSource extends LinearOpMode {
 
     private static final boolean USE_WEBCAM = true;  // true for webcam, false for phone camera
 
@@ -100,8 +99,8 @@ public class Autonomous_part1 extends LinearOpMode {
     public void runOpMode() {
         //\
         //
-        initAprilTag();
-        initLimelight();
+        // initAprilTag();
+        //initLimelight();
 
         // Wait for the DS start button to be touched.
         telemetry.addData("DS preview on/off", "3 dots, Camera Stream");
@@ -171,12 +170,12 @@ public class Autonomous_part1 extends LinearOpMode {
 
                 getData();
 
-                telemetryLimeLight();
+                //telemetryLimeLight();
             
                 // Press A to start auto-align & shoot
-                if (gamepad1.a && !alignActive) {
-                    alignActive = true;
-                }
+//                if (gamepad1.a && !alignActive) {
+                    //alignActive = true;
+//                }
             
                 if (alignActive) {
                     boolean aligned = alignToTarget();
@@ -193,7 +192,6 @@ public class Autonomous_part1 extends LinearOpMode {
                 telemetry.update();
             }
         }
-
     }
 
     private void initLimelight() {
@@ -227,7 +225,7 @@ public class Autonomous_part1 extends LinearOpMode {
                 double x = botpose.getPosition().x;
                 double y = botpose.getPosition().y;
                 telemetry.addData("MT1 Location", "(" + x + ", " + y + ")");
-                //System.out.printLn("x" + botpose[0]);
+                //System.out.printLn("x" + botpose[0])
             }
 
         } else {
