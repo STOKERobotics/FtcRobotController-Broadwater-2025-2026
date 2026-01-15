@@ -20,25 +20,27 @@ import com.qualcomm.robotcore.hardware.SwitchableLight;
 import android.graphics.Color;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
+import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 
 import java.util.List;
 
-@Autonomous(name = "Broadwater Robotics Auto")
+@Autonomous(name = "Broadwater Robotics Auto (TeleOp-aligned)")
 public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
     // -------------------- Hardware --------------------
-    private DcMotor motor0;
-    private DcMotor motor1;
-    private DcMotor motor2;
-    private DcMotor motor3;
-    private DcMotor motor0b;
-    private DcMotor motor1b;
-    private DcMotor motor2b;
+    private DcMotor motor0;  // FR
+    private DcMotor motor1;  // BL
+    private DcMotor motor2;  // FL
+    private DcMotor motor3;  // BR
+    private DcMotor motor0b; // Shooter 1
+    private DcMotor motor1b; // Shooter 2
+    private DcMotor motor2b; // Intake
 
-    private Servo servo0;   // Kicker
-    private CRServo servo1; // Merry Go Round Tray
-    private Servo servo2;   // Shooter Angle
+    private Servo servo0;    // Kicker
+    private CRServo servo1;  // Merry Go Round Tray
+    private Servo servo2;    // Shooter Angle
 
     private BNO055IMU imu1;
     private AnalogInput laser;
@@ -53,25 +55,24 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     // -------------------- Limelight --------------------
     private Limelight3A limelight;
 
-    // Limelight alignment control
+    // Align
     private static final double ALIGN_KP = 0.03;
     private static final double ALIGN_TOLERANCE = 1.0;   // deg
     private static final double ALIGN_MAX_POWER = 0.3;
 
-    // Shooter control constants (angle from distance)
+    // Shooter angle mapping
     private static final double SHOOTER_MIN_DIST = 50.0;   // inches
     private static final double SHOOTER_MAX_DIST = 120.0;  // inches
 
-    // Servo angle limits
     private static final double SERVO_MIN_ANGLE = 0.25;
     private static final double SERVO_MAX_ANGLE = 0.85;
 
-    // Firing servo timing (Kicker = servo0)
+    // Kicker timing (single tap like your revised TeleOp)
     private static final double KICK_EXTEND_POS = 1.0;
     private static final double KICK_RETRACT_POS = 0.0;
-    private static final long KICK_DURATION_MS = 350;
+    private static final long   KICK_DURATION_MS = 350;
 
-    // Shooter angle manual control (still used)
+    // Servo2 manual adjust (used in MANUAL fallback)
     private double servo2Pos = 0.5;
     private static final double SERVO2_MIN = 0.0;
     private static final double SERVO2_MAX = 1.0;
@@ -84,7 +85,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     private String latchedMotif = "NONE";
     private double lastTagDistanceIn = -1;
 
-    // Merry-go-round state machine
+    // Merry-go-round intake
     private enum INTAKEState { INIT_TO_SLOT0, WAIT_COLOR_0, MOVE_TO_SLOT1, WAIT_COLOR_1, MOVE_TO_SLOT2, WAIT_COLOR_2, DONE }
     private INTAKEState intakeState = INTAKEState.INIT_TO_SLOT0;
 
@@ -94,12 +95,10 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
     // Slot storage + fired tracking
     private final boolean[] slotFired = new boolean[3];
-    String[] slots = new String[3]; // "g" or "p"
-
-    // Ball color
+    private final String[] slots = new String[3]; // "g" or "p"
     private String ballColorValue;
 
-    // -------------------- SEQUENCE ENGINE --------------------
+    // -------------------- SEQUENCE ENGINE (kept) --------------------
     private enum ControlMode { MANUAL, SEQUENCE }
     private ControlMode controlMode = ControlMode.SEQUENCE;
 
@@ -169,25 +168,26 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     private long stepStartMs = 0;
 
     // -------------------- Botpose navigation tuning --------------------
-    // Gains
     private static final double KP_XY = 1.2;     // meters -> stick
     private static final double KP_H  = 0.02;    // deg -> stick
 
-    // Power limits (stick limits)
     private static final double MAX_DRIVE_POWER  = 0.55;
     private static final double MAX_STRAFE_POWER = 0.55;
     private static final double MAX_TURN_POWER   = 0.35;
 
-    // Finish tolerances
     private static final double POS_TOL_M    = 0.05; // 5cm
     private static final double ANG_TOL_DEG  = 3.0;
+    private static final int RED_TAG_ID  = 21;  // <-- put your real red tag ID here
+    private static final int BLUE_TAG_ID = 22;  // <-- put your real blue tag ID here
+
+    private enum Alliance { RED, BLUE }
+    private Alliance alliance = Alliance.RED; // default; you can change this later
 
     // ===== EDIT YOUR SEQUENCE HERE =====
-    // Units: x,y in METERS (botpose coordinate frame), heading in DEGREES
     private final Command[] sequence = new Command[] {
-            // Try a small move first for tuning
-            Command.driveTo(0.30, 0.00, 0, 5000),   // move ~30cm in +X direction of botpose
+            //Command.driveTo(0.00, 0.00, 0, 5000),
             Command.alignToTag(3000),
+            Command.shootMotif(0),
             Command.done()
     };
     // ===================================
@@ -196,16 +196,15 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     public void runOpMode() {
         initLimelight();
 
-        telemetry.addLine("Broadwater Auto ready.");
-        telemetry.addLine("Auto will run the sequence when you press START.");
-        telemetry.addLine("Press BACK during auto to cancel to manual.");
+        telemetry.addLine("Broadwater Auto ready (TeleOp-aligned).");
+        telemetry.addLine("Runs SEQUENCE. Press BACK to cancel to MANUAL.");
         telemetry.update();
 
         // Hardware map
-        motor0 = hardwareMap.get(DcMotor.class, "motor0");
-        motor1 = hardwareMap.get(DcMotor.class, "motor1");
-        motor2 = hardwareMap.get(DcMotor.class, "motor2");
-        motor3 = hardwareMap.get(DcMotor.class, "motor3");
+        motor0  = hardwareMap.get(DcMotor.class, "motor0");
+        motor1  = hardwareMap.get(DcMotor.class, "motor1");
+        motor2  = hardwareMap.get(DcMotor.class, "motor2");
+        motor3  = hardwareMap.get(DcMotor.class, "motor3");
         motor0b = hardwareMap.get(DcMotor.class, "motor0b");
         motor1b = hardwareMap.get(DcMotor.class, "motor1b");
         motor2b = hardwareMap.get(DcMotor.class, "motor2b");
@@ -215,7 +214,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         servo2 = hardwareMap.get(Servo.class, "servo2");
 
         laser = hardwareMap.get(AnalogInput.class, "laser");
-        imu1 = hardwareMap.get(BNO055IMU.class, "imu 1");
+        imu1  = hardwareMap.get(BNO055IMU.class, "imu 1");
 
         ballColor = hardwareMap.get(NormalizedColorSensor.class, "ballColor");
 
@@ -224,9 +223,9 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         mag2 = hardwareMap.get(DigitalChannel.class, "mag2");
         mag3 = hardwareMap.get(DigitalChannel.class, "mag3");
 
-        // Motor directions/modes
+        // -------------------- Motor directions (match revised TeleOp) --------------------
         motor0.setDirection(DcMotor.Direction.FORWARD);
-        motor1.setDirection(DcMotor.Direction.FORWARD);
+        motor1.setDirection(DcMotor.Direction.REVERSE); // IMPORTANT: TeleOp uses REVERSE
         motor2.setDirection(DcMotor.Direction.FORWARD);
         motor3.setDirection(DcMotor.Direction.FORWARD);
 
@@ -257,7 +256,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         servo2.setPosition(servo2Pos);
         lastServo2Time = getRuntime();
 
-        // IMU init (not used for nav here, but keep)
+        // IMU init (kept for MANUAL field-centric fallback)
         BNO055IMU.Parameters imuParameters = new BNO055IMU.Parameters();
         imuParameters.angleUnit = BNO055IMU.AngleUnit.DEGREES;
         imuParameters.accelUnit = BNO055IMU.AccelUnit.METERS_PERSEC_PERSEC;
@@ -274,6 +273,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         seqIndex = 0;
         stepStartMs = System.currentTimeMillis();
 
+
         waitForStart();
 
         while (opModeIsActive()) {
@@ -281,16 +281,21 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
             // Cancel sequence if needed
             if (gamepad1.back && controlMode == ControlMode.SEQUENCE) cancelSequence();
 
-            // Telemetry + latching always
+            // Always update telemetry + latching
             getData();
             telemetryLimeLight();
+
+            // Optional: if you want these always on like TeleOp, uncomment
+            // motor0b.setPower(1);
+            // motor1b.setPower(1);
+            // motor2b.setPower(1);
 
             if (controlMode == ControlMode.SEQUENCE) {
                 runSequence();
             } else {
-                // Manual (only if canceled)
+                // MANUAL fallback uses your revised TeleOp-style IMU field-centric
                 sticksManualTeleopStyle();
-                buttons(); // shooter angle adjust
+                buttonsManualServo2();
                 updateBallColor();
                 merryGoRoundIntake();
                 telemetryBallColor();
@@ -438,8 +443,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         }
     }
 
-    // -------------------- BOTPOSE NAV (auto -> fake sticks -> teleop mixer) --------------------
-
+    // -------------------- BOTPOSE NAV --------------------
     private boolean driveToBotpose(double targetX, double targetY, double targetHeadingDeg) {
 
         PoseEstimate cur = getPoseEstimate();
@@ -449,7 +453,6 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
             return false;
         }
 
-        // field error
         double dx = targetX - cur.x;
         double dy = targetY - cur.y;
         double dh = angleWrapDeg(targetHeadingDeg - cur.headingDeg);
@@ -463,21 +466,17 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
             return true;
         }
 
-        // field error -> robot error
         double hRad = Math.toRadians(cur.headingDeg);
         double robotForward =  dx * Math.cos(hRad) + dy * Math.sin(hRad);
         double robotLeft    = -dx * Math.sin(hRad) + dy * Math.cos(hRad);
 
-        // slowdown near target
         double posScale = clip(dist / 0.60, 0.18, 1.0);
         double angScale = clip(Math.abs(dh) / 25.0, 0.18, 1.0);
 
-        // Fake sticks (intent)
         double LSY = clip(robotForward * KP_XY * posScale, -MAX_DRIVE_POWER,  MAX_DRIVE_POWER);
         double LSX = clip(robotLeft    * KP_XY * posScale, -MAX_STRAFE_POWER, MAX_STRAFE_POWER);
         double RSX = clip(dh          * KP_H  * angScale, -MAX_TURN_POWER,   MAX_TURN_POWER);
 
-        // finish heading when close
         if (dist < 0.15) {
             LSY = 0;
             LSX = 0;
@@ -503,14 +502,12 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
         double x = botpose.getPosition().x; // meters
         double y = botpose.getPosition().y; // meters
-
-        // This must compile for you already since you were using it
         double headingDeg = botpose.getOrientation().getYaw(AngleUnit.DEGREES);
 
         return new PoseEstimate(x, y, headingDeg);
     }
 
-    // Same mixing style as your TeleOp, but with normalization for accuracy
+    // Same mixer style as your TeleOp convention (+ normalization)
     private void driveByIntent(double lsy, double lsx, double rsx) {
         double drive  = lsy;
         double strafe = lsx;
@@ -525,7 +522,6 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         double br = (correctedDrive - correctedStrafe) + turn; // motor3
         double bl = (correctedDrive + correctedStrafe) - turn; // motor1
 
-        // Normalize so direction stays correct
         double max = Math.max(1.0,
                 Math.max(Math.abs(fr),
                         Math.max(Math.abs(fl),
@@ -552,28 +548,56 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     // -------------------- Align --------------------
     private boolean alignToTarget() {
         LLResult result = limelight.getLatestResult();
-        if (result != null && result.isValid()) {
-            double tx = result.getTx();
-
-            if (Math.abs(tx) <= ALIGN_TOLERANCE) {
-                stopDrive();
-                telemetry.addData("Alignment", "Aligned!");
-                return true;
-            }
-
-            double turnPower = Math.max(-ALIGN_MAX_POWER,
-                    Math.min(ALIGN_MAX_POWER, tx * ALIGN_KP));
-
-            // rotate only, using same mixer
-            driveByIntent(0, 0, turnPower);
-
-            telemetry.addData("Aligning", "tx=%.2f  power=%.2f", tx, turnPower);
-            return false;
-        } else {
-            telemetry.addData("Alignment", "No target detected");
+        if (result == null || !result.isValid()) {
+            telemetry.addData("Alignment", "No valid LL result");
             stopDrive();
             return false;
         }
+
+        int wantedId = getAllianceTagId();
+
+        // Find best matching tag by ID
+        LLResultTypes.FiducialResult best = getBestFiducialById(result, wantedId);
+        if (best == null) {
+            telemetry.addData("Alignment", "No %s tag detected (id=%d)",
+                    (alliance == Alliance.RED ? "RED" : "BLUE"), wantedId);
+            stopDrive();
+            return false;
+        }
+
+        // Compute tx (deg) for THIS fiducial from camera-space pose
+        Pose3D camPose = best.getTargetPoseCameraSpace();
+        if (camPose == null) {
+            telemetry.addLine("Alignment: tag pose missing");
+            stopDrive();
+            return false;
+        }
+
+        // In camera space: +x is right, +z is forward (Limelight pose)
+        double x = camPose.getPosition().x;
+        double z = camPose.getPosition().z;
+
+        // Horizontal angle offset in degrees (tx-like)
+        double tx = Math.toDegrees(Math.atan2(x, z));
+
+        if (Math.abs(tx) <= ALIGN_TOLERANCE) {
+            stopDrive();
+            telemetry.addData("Alignment", "Aligned to %s!",
+                    (alliance == Alliance.RED ? "RED" : "BLUE"));
+
+            // Latch motif + distance FROM THIS TAG
+            latchMotifAndDistanceFromFiducial(best);
+            return true;
+        }
+
+        double turnPower = Math.max(-ALIGN_MAX_POWER, Math.min(ALIGN_MAX_POWER, tx * ALIGN_KP));
+        driveByIntent(0, 0, turnPower);
+
+        telemetry.addData("Aligning", "%s id=%d tx=%.2f pwr=%.2f",
+                (alliance == Alliance.RED ? "RED" : "BLUE"),
+                best.getFiducialId(), tx, turnPower);
+
+        return false;
     }
 
     // -------------------- Shooter + motif firing --------------------
@@ -624,15 +648,20 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
             rotateToSlotBlocking(slotToShoot);
 
-            servo0.setPosition(KICK_EXTEND_POS);
-            sleep(KICK_DURATION_MS);
-            servo0.setPosition(KICK_RETRACT_POS);
+            // Single-tap kick (TeleOp-aligned)
+            kickOnce();
 
             slotFired[slotToShoot] = true;
             sleep(120);
         }
 
         telemetry.addLine("Shoot sequence done!");
+    }
+
+    private void kickOnce() {
+        servo0.setPosition(KICK_EXTEND_POS);
+        sleep(KICK_DURATION_MS);
+        servo0.setPosition(KICK_RETRACT_POS);
     }
 
     private boolean allSlotsLoaded() {
@@ -653,6 +682,40 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
             case 1: return atShootSlot1();
             case 2: return atShootSlot2();
             default: return false;
+        }
+    }
+    private LLResultTypes.FiducialResult getBestFiducialById(LLResult result, int wantedId) {
+        List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
+        if (tags == null || tags.isEmpty()) return null;
+
+        LLResultTypes.FiducialResult best = null;
+        for (LLResultTypes.FiducialResult t : tags) {
+            if (t.getFiducialId() != wantedId) continue;
+            if (best == null || t.getTargetArea() > best.getTargetArea()) best = t;
+        }
+        return best;
+    }
+
+    private void latchMotifAndDistanceFromFiducial(LLResultTypes.FiducialResult tag) {
+        if (tag == null) return;
+
+        int id = tag.getFiducialId();
+        String motif = decodeMotifFromTagId(id);
+
+        if (!"UNKNOWN".equals(motif)) {
+            motifLatched = true;
+            latchedTagId = id;
+            latchedMotif = motif;
+        }
+
+        Pose3D camPose = tag.getTargetPoseCameraSpace();
+        if (camPose != null) {
+            double xIn = camPose.getPosition().x * 39.37;
+            double yIn = camPose.getPosition().y * 39.37;
+            double zIn = camPose.getPosition().z * 39.37;
+            lastTagDistanceIn = Math.sqrt(xIn*xIn + yIn*yIn + zIn*zIn);
+        } else {
+            lastTagDistanceIn = -1;
         }
     }
 
@@ -752,6 +815,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         telemetry.addData("Ball", ballColorValue);
     }
 
+    // Match your revised TeleOp thresholds
     private void updateBallColor() {
         NormalizedRGBA c = ballColor.getNormalizedColors();
 
@@ -767,7 +831,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         float sat = hsv[1];
         float val = hsv[2];
 
-        boolean confident = (sat > 0.15) && (val > 0.05);
+        boolean confident = (sat > 0.05) && (val > 0.009);
 
         if (confident && (hue >= 120 && hue <= 180)) {
             ballColorValue = "g";
@@ -782,12 +846,12 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         return ballColorValue != null && !ballColorValue.isEmpty();
     }
 
-    // Slot detectors
+    // Slot detectors (mag0/mag1)
     private boolean atSlot0() { return !mag0.getState() && !mag1.getState(); }
     private boolean atSlot1() { return !mag0.getState() &&  mag1.getState(); }
     private boolean atSlot2() { return  mag0.getState() && !mag1.getState(); }
 
-    // SHOOTER slot detectors (mag2/mag3)
+    // Shooter slot detectors (mag2/mag3)
     private boolean atShootSlot0() { return !mag2.getState() && !mag3.getState(); }
     private boolean atShootSlot1() { return !mag2.getState() &&  mag3.getState(); }
     private boolean atShootSlot2() { return  mag2.getState() && !mag3.getState(); }
@@ -861,17 +925,42 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
     }
 
-    // -------------------- Manual fallback (only if canceled) --------------------
+    // -------------------- MANUAL fallback (TeleOp-aligned IMU field-centric) --------------------
     private void sticksManualTeleopStyle() {
-        // mimic your teleop stick pipeline
-        double rsx = -gamepad1.right_stick_x;
-        double lsy = gamepad1.left_stick_y;
-        double lsx = gamepad1.left_stick_x;
+        // same stick convention as your TeleOp
+        double rsx = -gamepad1.right_stick_x;  // turn
+        double lsy =  gamepad1.left_stick_y;   // forward/back
+        double lsx =  gamepad1.left_stick_x;   // strafe
 
-        driveByIntent(lsy, lsx, rsx);
+        driveByIntentFieldCentric(lsy, lsx, rsx);
     }
 
-    private void buttons() {
+    private void driveByIntentFieldCentric(double lsy, double lsx, double rsx) {
+        // Read yaw in degrees (ZYX) and convert once
+        double yawDeg = imu1.getAngularOrientation(
+                AxesReference.INTRINSIC,
+                AxesOrder.ZYX,
+                AngleUnit.DEGREES
+        ).firstAngle;
+
+        double yawRad = Math.toRadians(yawDeg);
+
+        // Rotate inputs by -yaw (field-centric)
+        double drivePower  = lsy;
+        double strafePower = lsx;
+
+        double robotDrive  =  drivePower * Math.cos(yawRad) + strafePower * Math.sin(yawRad);
+        double robotStrafe = -drivePower * Math.sin(yawRad) + strafePower * Math.cos(yawRad);
+
+        // Feed into your normal mixer
+        driveByIntent(robotDrive, robotStrafe, rsx);
+
+        telemetry.addData("IMU yaw (deg)", "%.1f", yawDeg);
+    }
+    private int getAllianceTagId() {
+        return (alliance == Alliance.RED) ? RED_TAG_ID : BLUE_TAG_ID;
+    }
+    private void buttonsManualServo2() {
         double now = getRuntime();
         double dt = now - lastServo2Time;
         lastServo2Time = now;
