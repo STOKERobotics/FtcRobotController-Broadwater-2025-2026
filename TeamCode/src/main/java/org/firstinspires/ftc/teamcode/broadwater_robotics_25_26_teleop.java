@@ -79,29 +79,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private DigitalChannel mag2; // Shooter Magnet 2
     private DigitalChannel mag3; // Shooter Magnet 3
 
-    // ---------------------------
-    // ✅ "INTERRUPT-LIKE" MAG EDGE HOLDERS
-    // ---------------------------
-    private final boolean[] lastMag0Holder = new boolean[1];
-    private final boolean[] lastMag1Holder = new boolean[1];
-    private final boolean[] lastMag2Holder = new boolean[1];
-    private final boolean[] lastMag3Holder = new boolean[1];
 
-    // Falling edge = true -> false (common when hall sensor pulls LOW when magnet present)
-    private boolean magFallingEdge(DigitalChannel mag, boolean[] last) {
-        boolean cur = mag.getState();
-        boolean triggered = last[0] && !cur;
-        last[0] = cur;
-        return triggered;
-    }
-
-    // Rising edge = false -> true
-    private boolean magRisingEdge(DigitalChannel mag, boolean[] last) {
-        boolean cur = mag.getState();
-        boolean triggered = !last[0] && cur;
-        last[0] = cur;
-        return triggered;
-    }
 
     // Limelight alignment control
     private static final double ALIGN_KP = 0.03;
@@ -121,6 +99,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private static final double KICK_EXTEND_POS = 0.0;
     private static final double KICK_RETRACT_POS = 1.0;
     private static final long   KICK_DURATION_MS = 1000;  // how long to stay extended
+    private boolean shootingBusy = false;
 
     // --- Dry fire mode ---
     private boolean dryFireMode = false;
@@ -153,10 +132,16 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private final boolean[] slotFired = new boolean[3];
 
     // Adjust if servo direction is backwards
-    private static final double MGR_FAST_POWER  = 1.0;   // your normal spin
-    private static final double MGR_CRAWL_POWER = 0.20;  // slow approach
-    private static final long   MGR_BRAKE_MS    = 60;    // reverse tap time
-    private static final double MGR_BRAKE_POWER = -0.25; // reverse tap power
+    private static final double MGR_FAST_POWER   = 0.25;   // your main spin
+    private static final double MGR_CRAWL_POWER  = 0.1;  // slow approach
+    private static final double MGR_BACK_POWER   = -0.15; // slow reverse
+    private static final long   MGR_BRAKE_MS     = 70;    // short reverse tap
+    private static final double MGR_BRAKE_POWER  = -0.30; // brake tap power
+    private static final double MGR_BACKUP_POWER   = -0.12;  // stronger than -0.10
+    private static final long   MGR_BACKUP_1DEG_MS = 45;
+
+    private static final long   MGR_LEAVE_SLOT_TIMEOUT_MS = 500;
+    private static final long   MGR_REENTER_TIMEOUT_MS    = 700;
 
     // Safety so you don’t spin forever if a magnet fails
     private static final long MGR_MOVE_TIMEOUT_MS = 2000;
@@ -208,18 +193,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
 
 
-        // ---------------------------
-        // ✅ MAG INPUT MODE + HOLDER INIT (put here, BEFORE waitForStart)
-        // ---------------------------
-        mag0.setMode(DigitalChannel.Mode.INPUT);
-        mag1.setMode(DigitalChannel.Mode.INPUT);
-        mag2.setMode(DigitalChannel.Mode.INPUT);
-        mag3.setMode(DigitalChannel.Mode.INPUT);
 
-        lastMag0Holder[0] = mag0.getState();
-        lastMag1Holder[0] = mag1.getState();
-        lastMag2Holder[0] = mag2.getState();
-        lastMag3Holder[0] = mag3.getState();
 
         // Put initialization blocks here.
         motor0.setDirection(DcMotor.Direction.FORWARD);
@@ -251,6 +225,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         motor2b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
         servo0.setPosition(0);
+        servo1.setDirection(DcMotorSimple.Direction.REVERSE);
 
         RevHubOrientationOnRobot orientation =
                 new RevHubOrientationOnRobot(
@@ -269,33 +244,24 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
             ((SwitchableLight)ballColor).enableLight(true);
         }
 
+        mag0.setMode(DigitalChannel.Mode.INPUT);
+        mag1.setMode(DigitalChannel.Mode.INPUT);
+        mag2.setMode(DigitalChannel.Mode.INPUT);
+        mag3.setMode(DigitalChannel.Mode.INPUT);
+
         waitForStart();
 
         if (opModeIsActive()) {
             while (opModeIsActive()) {
 
 
-                // ---------------------------
-                // ✅ OPTIONAL: live "interrupt-like" events in TeleOp loop
-                // (This does NOT change your slot logic; it's just a debug/safety hook.)
-                // If mag2/mag3 transitions while rotating, you’ll see it.
-                // ---------------------------
-                boolean shootMagEvent =
-                        magFallingEdge(mag2, lastMag2Holder) || magFallingEdge(mag3, lastMag3Holder)
-                                || magRisingEdge (mag2, lastMag2Holder) || magRisingEdge (mag3, lastMag3Holder);
-
-                if (shootMagEvent) {
-                    telemetry.addLine("MAG EVENT (mag2/mag3 changed)");
+                if (alignActive) {
+                    telemetryLimeLight();  // only when aligning
                 }
-
-                getData();
-                telemetryLimeLight();
-
                 // Press A to start auto-align & shoot
                 if (!dryFireMode && gamepad1.a && !alignActive) {
                     alignActive = true;
                 }
-
                 if (alignActive) {
                     boolean aligned = alignToTarget();
                     if (aligned) {
@@ -309,10 +275,14 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                     buttons();   // manual controls
                 }
 
-                updateBallColor();
+                if (intakeState != INTAKEState.DONE) {
+                    updateBallColor();
+                }
                 merryGoRoundIntake();
-                telemetryBallColor();
-
+                // Optional: only show color telemetry while intaking
+                if (intakeState != INTAKEState.DONE) {
+                    telemetryBallColor();
+                }
                 motor0b.setPower(1);
                 motor1b.setPower(1);
                 motor2b.setPower(1);
@@ -322,7 +292,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 double inches = mm / 25.4;
 
                 telemetry.addData("Laser Dist", "%.0f mm  (%.1f in)", mm, inches);
-                telemetry.update();
+                telemetryUpdateThrottled();
             }
         }
     }
@@ -332,6 +302,16 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         telemetry.setMsTransmissionInterval(11);
         limelight.pipelineSwitch(0);
         limelight.start();
+    }
+    private long lastTelemMs = 0;
+    private static final long TELEM_PERIOD_MS = 100; // 10Hz
+
+    private void telemetryUpdateThrottled() {
+        long now = System.currentTimeMillis();
+        if (now - lastTelemMs >= TELEM_PERIOD_MS) {
+            telemetry.update();
+            lastTelemMs = now;
+        }
     }
 
     private void telemetryLimeLight() {
@@ -473,63 +453,53 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         return slots[0] != null && slots[1] != null && slots[2] != null;
     }
 
-    // ---------------------------
-    // ✅ UPDATED: rotateToSlotBlocking uses magnet edges to re-check ASAP on transitions
-    // (still FTC-safe polling, but reacts like an interrupt)
-    // ---------------------------
     private void rotateToSlotBlocking(int targetSlot) {
-        ensureKickerRetracted();
+        shootingBusy = true;
+        try {
+            ensureKickerRetracted();
 
-        long start = System.currentTimeMillis();
+            long start = System.currentTimeMillis();
 
-        // Start fast
-        servo1.setPower(MGR_FAST_POWER);
-
-        // Track last state so we can react instantly when magnet pattern changes
-        boolean last2 = mag2.getState();
-        boolean last3 = mag3.getState();
-
-        boolean crawl = false;
-
-        while (opModeIsActive() && (System.currentTimeMillis() - start) < MGR_MOVE_TIMEOUT_MS) {
-
-            boolean cur2 = mag2.getState();
-            boolean cur3 = mag3.getState();
-
-            // If mags changed, we are near a slot boundary -> start crawling
-            if (!crawl && (cur2 != last2 || cur3 != last3)) {
-                crawl = true;
-                servo1.setPower(MGR_CRAWL_POWER);
+            // 1) Fast spin until we SEE the target slot
+            servo1.setPower(MGR_FAST_POWER);
+            while (opModeIsActive()
+                    && !atShootSlot(targetSlot)
+                    && (System.currentTimeMillis() - start) < MGR_MOVE_TIMEOUT_MS) {
+                idle();
             }
-            last2 = cur2;
-            last3 = cur3;
+            servo1.setPower(0);
 
-            // Stop condition
-            if (atShootSlot(targetSlot)) {
-                break;
+            if (!atShootSlot(targetSlot)) return; // timeout safety
+
+            // 2) Brake tap (optional but helps overshoot)
+            servo1.setPower(MGR_BRAKE_POWER);
+            sleep(MGR_BRAKE_MS);
+            servo1.setPower(0);
+
+            // 3) Creep forward a bit to settle into the slot pattern
+            long creepStart = System.currentTimeMillis();
+            servo1.setPower(MGR_CRAWL_POWER);
+            while (opModeIsActive()
+                    && !atShootSlot(targetSlot)
+                    && (System.currentTimeMillis() - creepStart) < 300) {
+                idle();
             }
+            servo1.setPower(0);
 
-            telemetry.addData("Rotating target", targetSlot);
-            telemetry.addData("Crawl", crawl);
-            telemetry.addData("Mag2", cur2);
-            telemetry.addData("Mag3", cur3);
-            telemetry.update();
-            idle();
+            // 4) Tiny reverse nudge (your “1 degree back”)
+            rotateTrayBackOneDegree();
+
+        } finally {
+            servo1.setPower(0);
+            shootingBusy = false;
         }
-
-        // Stop motor first
-        servo1.setPower(0);
-
-        // ✅ Active braking: quick reverse tap to cancel inertia
-        // (This is the magic for the "1 inch past" problem.)
-        servo1.setPower(MGR_BRAKE_POWER);
-        sleep(MGR_BRAKE_MS);
-        servo1.setPower(0);
-
-        // Optional: tiny settle
-        sleep(20);
     }
 
+    private void rotateTrayBackOneDegree() {
+        servo1.setPower(MGR_BACKUP_POWER);
+        sleep(MGR_BACKUP_1DEG_MS);
+        servo1.setPower(0);
+    }
 
     private void stopDrive() {
         motor0.setPower(0);
@@ -702,6 +672,10 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     }
 
     private void merryGoRoundIntake() {
+        if (shootingBusy) {
+            servo1.setPower(0); // do not fight shooter rotation
+            return;
+        }
         boolean seen = colorSeen();
         boolean newColorEvent = seen && !colorLatched;
         if (seen) colorLatched = true;
@@ -711,7 +685,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
             case INIT_TO_SLOT0:
                 ensureKickerRetracted();
-                servo1.setPower(.25);
+                servo1.setPower(MGR_FAST_POWER);
                 if (atSlot0()) {
                     servo1.setPower(0);
                     currentSlot = 0;
@@ -729,7 +703,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
             case MOVE_TO_SLOT1:
                 ensureKickerRetracted();
-                servo1.setPower(.25);
+                servo1.setPower(MGR_FAST_POWER);
                 if (atSlot1()) {
                     servo1.setPower(0);
                     currentSlot = 1;
@@ -747,7 +721,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
             case MOVE_TO_SLOT2:
                 ensureKickerRetracted();
-                servo1.setPower(.25);
+                servo1.setPower(MGR_FAST_POWER);
                 if (atSlot2()) {
                     servo1.setPower(0);
                     currentSlot = 2;
@@ -823,6 +797,9 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         servo2.setPosition(servo2Pos);
         telemetry.addData("Shooter Position", "%.3f", servo2.getPosition());
 
+        if (gamepad1.right_bumper) {
+            getData();
+        }
         if (gamepad2.y && !wasDryToggle) {
             dryFireMode = !dryFireMode;
         }
