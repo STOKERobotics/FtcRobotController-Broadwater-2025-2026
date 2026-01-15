@@ -156,7 +156,6 @@ public class SimpleDrive extends LinearOpMode {
                 telemetry.update();
             }
         }
-
     }
 
     private void initAprilTag() {

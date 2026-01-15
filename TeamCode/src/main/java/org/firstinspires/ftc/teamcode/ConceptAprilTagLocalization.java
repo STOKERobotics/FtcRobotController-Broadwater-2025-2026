@@ -67,7 +67,7 @@ import java.util.List;
  * Use Android Studio to Copy this Class, and Paste it into your team's code folder with a new name.
  * Remove or comment out the @Disabled line to add this OpMode to the Driver Station OpMode list.
  */
-//@TeleOp(name = "Concept: AprilTag Localization", group = "Concept")
+@TeleOp(name = "Concept: AprilTag Localization", group = "Concept")
 @Disabled
 public class ConceptAprilTagLocalization extends LinearOpMode {
 
@@ -143,7 +143,6 @@ public class ConceptAprilTagLocalization extends LinearOpMode {
 
         // Save more CPU resources when camera is no longer needed.
         visionPortal.close();
-
 
     }   // end method runOpMode()
 

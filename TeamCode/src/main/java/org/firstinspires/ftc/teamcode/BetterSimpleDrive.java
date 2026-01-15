@@ -25,7 +25,7 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 
 import java.util.List;
 
-@TeleOp(name = "BetterSimpleDrive")
+@TeleOp(name = "BetterSimpleDrivea")
 @Disabled
     public class BetterSimpleDrive extends LinearOpMode {
 
@@ -183,7 +183,6 @@ import java.util.List;
                 telemetry.addData("AutoAim", autoAimEnabled ? "ON" : "OFF");
                 telemetry.update();
             }
-
         }
 
         // =============================================================
