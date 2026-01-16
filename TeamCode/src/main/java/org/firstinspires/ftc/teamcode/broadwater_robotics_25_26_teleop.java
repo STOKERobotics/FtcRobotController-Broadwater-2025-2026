@@ -35,6 +35,7 @@ import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
+import org.firstinspires.ftc.robotcore.external.navigation.Orientation;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.CRServo;
@@ -71,8 +72,8 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private CRServo servo1; // Merry Go Round Tray
     private Servo servo2; // Shooter Angle
     private BNO055IMU imu1;
-    //private DigitalChannel blueLED;
-    //private DigitalChannel redLED;
+    private DigitalChannel blueLED;
+    private DigitalChannel redLED;
     private AnalogInput laser;
     private DigitalChannel mag0; // Intake Magnet 0
     private DigitalChannel mag1; // Intake Magnet 1
@@ -82,9 +83,19 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
 
     // Limelight alignment control
-    private static final double ALIGN_KP = 0.03;
-    private static final double ALIGN_TOLERANCE = 1.0;   // deg
-    private static final double ALIGN_MAX_POWER = 0.3;
+    // --- Alignment tuning ---
+    private static final double ALIGN_KP = 0.02;            // start smaller than before
+    private static final double ALIGN_TOLERANCE = 1.0;      // deg
+    private static final double ALIGN_MAX_POWER = 0.25;
+    private static final double ALIGN_MIN_POWER = 0.08;     // helps overcome friction
+    private static final long   ALIGN_STABLE_MS = 200;      // must stay within tolerance this long
+
+    private boolean alignStableStarted = false;
+    private long alignStableStartMs = 0;
+
+    // Optional smoothing (prevents jitter)
+    private double txFiltered = 0.0;
+    private static final double TX_ALPHA = 0.35; // 0..1 (higher = less smoothing)
     private boolean alignActive = false;
 
     // Shooter control constants
@@ -130,6 +141,9 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
     private int currentSlot = 0;
     private boolean colorLatched = false; // edge-detect so one ball = one store
+    private boolean isAlignTag(int id) {
+        return (id == 20 || id == 24);
+    }
 
     // Marks which physical slot has already been fired
     private final boolean[] slotFired = new boolean[3];
@@ -163,7 +177,6 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private static final long MGR_MOVE_TIMEOUT_MS = 10000;
 
     float RSX;
-    double YawValue;
     float LSY;
     double correctedStrafePower;
     double strafePower;
@@ -205,6 +218,11 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         mag1 = hardwareMap.get(DigitalChannel.class, "mag1");
         mag2 = hardwareMap.get(DigitalChannel.class, "mag2");
         mag3 = hardwareMap.get(DigitalChannel.class, "mag3");
+
+        redLED  = hardwareMap.get(DigitalChannel.class, "redLED");
+        blueLED = hardwareMap.get(DigitalChannel.class, "blueLED");
+        redLED.setMode(DigitalChannel.Mode.OUTPUT);
+        blueLED.setMode(DigitalChannel.Mode.OUTPUT);
 
 
 
@@ -253,7 +271,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         imuParameters.accelUnit = BNO055IMU.AccelUnit.METERS_PERSEC_PERSEC;
         imuParameters.loggingEnabled = false;
         imu1.initialize(imuParameters);
-        YawValue = imu1.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.XYZ, AngleUnit.DEGREES).thirdAngle;
+
 
         if (ballColor instanceof SwitchableLight) {
             ((SwitchableLight)ballColor).enableLight(true);
@@ -264,6 +282,9 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         mag2.setMode(DigitalChannel.Mode.INPUT);
         mag3.setMode(DigitalChannel.Mode.INPUT);
 
+        motor0b.setPower(.5);
+        motor1b.setPower(.5);
+
 
 
         waitForStart();
@@ -271,14 +292,27 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         if (opModeIsActive()) {
             while (opModeIsActive()) {
                 telemetry.clear();
-                //lights();
+                lights();
+                if (motor0b.getPower() <=0){
+                    motor0b.setPower(0.1);
+                    motor1b.setPower(0.1);
+                }
 
 
                 if (alignActive) {
                     telemetryLimeLight();  // only when aligning
                 }
-                if (gamepad1.a && !alignActive) {
+                // Start align: Controller 1 cross (gamepad1.y)
+                if (gamepad1.y && !alignActive) {
                     alignActive = true;
+                    txFiltered = 0.0;
+                    alignStableStarted = false;
+                }
+
+                // Cancel align: Controller 1 circle (gamepad1.b)
+                if (gamepad1.b && alignActive) {
+                    alignActive = false;
+                    stopDrive();
                 }
                 if (motifListenEnabled) {
                     updateMotifListener();
@@ -288,7 +322,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                     if (aligned) {
                         adjustShooterAndFire();  // adjust and kick
                         alignActive = false;     // return to manual mode
-                    } else if (gamepad1.b && alignActive) {
+                    } else if (gamepad2.b && alignActive) {
                         alignActive = false;
                     }
                 } else {
@@ -304,8 +338,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 if (intakeState != INTAKEState.DONE) {
                     telemetryBallColor();
                 }
-                motor0b.setPower(1);
-                motor1b.setPower(1);
+
                 motor2b.setPower(1);
 
                 double v = laser.getVoltage();        // 0.0 to ~3.3V
@@ -314,6 +347,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 boolean m2 = !mag2.getState(); // true = magnet ON
                 boolean m3 = !mag3.getState(); // true = magnet ON
 
+                telemetry.addData("Shooter power", motor0b.getPower());
                 telemetry.addData("SHOOT RAW", "m2=%s m3=%s", m2, m3);
                 telemetry.addData("ShootSlot()", getCurrentShootSlot());
                 /*
@@ -343,6 +377,8 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 telemetry.addData("Laser Dist", "%.0f mm  (%.1f in)", mm, inches);
                 telemetry.addData("Motif Listener", motifListenEnabled ? "ON" : "OFF");
                 telemetry.addData("Latched Motif", "%s (Tag %d)", latchedMotif, latchedTagId);
+
+
 
                 telemetryUpdateThrottled();
             }
@@ -415,30 +451,82 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
     }
 
+
     private boolean alignToTarget() {
+
         LLResult result = limelight.getLatestResult();
-        if (result != null && result.isValid()) {
-            double tx = result.getTx();
+        List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
+        int count = (tags == null) ? 0 : tags.size();
+        telemetry.addData("LL valid", result.isValid());
+        telemetry.addData("Fiducials", count);
 
-            if (Math.abs(tx) <= ALIGN_TOLERANCE) {
-                stopDrive();
-                telemetry.addData("Alignment", "Aligned!");
-                return true;
+        if (count > 0) {
+            for (int i = 0; i < Math.min(6, count); i++) {
+                LLResultTypes.FiducialResult t = tags.get(i);
+                telemetry.addData("Tag[" + i + "]", "id=%d area=%.3f",
+                        t.getFiducialId(), t.getTargetArea());
             }
-
-            double turnPower = Math.max(-ALIGN_MAX_POWER,
-                    Math.min(ALIGN_MAX_POWER, tx * ALIGN_KP));
-            LSX = (float) turnPower;
-            sticks2();
-
-            telemetry.addData("Aligning", "tx=%.2f  power=%.2f", tx, turnPower);
-            return false;
-        } else {
-            telemetry.addData("Alignment", "No target detected");
+        }
+        if (result == null || !result.isValid()) {
             stopDrive();
+            telemetry.addLine("ALIGN: no Limelight result");
             return false;
         }
+
+        // --- Find best ALIGNMENT tag (20 or 24 only) ---
+        LLResultTypes.FiducialResult best = null;
+        for (LLResultTypes.FiducialResult t : result.getFiducialResults()) {
+            int id = t.getFiducialId();
+            if (id == 20 || id == 24) {
+                if (best == null || t.getTargetArea() > best.getTargetArea()) {
+                    best = t;
+                }
+            }
+        }
+
+        if (best == null) {
+            stopDrive();
+            telemetry.addLine("ALIGN: tag 20/24 not visible");
+            return false;
+        }
+
+        // --- Compute tx from pose (THIS replaces getTx) ---
+        Pose3D pose = best.getTargetPoseCameraSpace();
+        if (pose == null) {
+            stopDrive();
+            telemetry.addLine("ALIGN: no pose");
+            return false;
+        }
+
+        double x = pose.getPosition().x; // meters (left/right)
+        double z = pose.getPosition().z; // meters (forward)
+        double tx = Math.toDegrees(Math.atan2(x, z));
+
+        telemetry.addData("ALIGN",
+                "tag=%d tx=%.2f x=%.2f z=%.2f",
+                best.getFiducialId(), tx, x, z);
+
+        // --- Check alignment ---
+        if (Math.abs(tx) <= ALIGN_TOLERANCE) {
+            stopDrive();
+            telemetry.addLine("ALIGN: aligned");
+            return true;
+        }
+
+        // --- Turn only (robot-centric) ---
+        double turn = tx * ALIGN_KP;   // flip sign if turns wrong way
+        turn = Math.max(-ALIGN_MAX_POWER, Math.min(ALIGN_MAX_POWER, turn));
+
+        motor0.setPower(-turn); // FR
+        motor1.setPower(turn);  // BL
+        motor2.setPower(-turn); // FL
+        motor3.setPower(turn);  // BR
+
+        return false;
     }
+
+
+
     private void stepShootTrayOneSlotNoKick() {
         if (shootingBusy) return;
 
@@ -706,6 +794,10 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         }
     }
 
+    private boolean isMotifTag(int id) {
+        return (id == 21 || id == 22 || id == 23);
+    }
+
     private void updateLatchedMotif(LLResult result) {
         if (motifLatched) return;
         if (result == null || !result.isValid()) return;
@@ -713,10 +805,13 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
         if (tags == null || tags.isEmpty()) return;
 
-        LLResultTypes.FiducialResult best = tags.get(0);
+        LLResultTypes.FiducialResult best = null;
         for (LLResultTypes.FiducialResult t : tags) {
-            if (t.getTargetArea() > best.getTargetArea()) best = t;
+            int id = t.getFiducialId();
+            if (!isMotifTag(id)) continue; // <-- ONLY 21-23
+            if (best == null || t.getTargetArea() > best.getTargetArea()) best = t;
         }
+        if (best == null) return;
 
         int id = best.getFiducialId();
         String motif = decodeMotifFromTagId(id);
@@ -727,6 +822,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
             latchedMotif = motif;
         }
     }
+
     private int getStableShootSlot(long stableMs, long timeoutMs) {
         long start = System.currentTimeMillis();
         while (opModeIsActive() && (System.currentTimeMillis() - start) < timeoutMs) {
@@ -838,7 +934,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         colorLatched = seen;
 
         // ============================================================
-        // MANUAL STEP: gamepad2 LEFT BUMPER always steps to next INTAKE slot
+        // MANUAL STEP: d2 LEFT BUMPER always steps to next INTAKE slot
         // ============================================================
         boolean step = gamepad2.left_bumper;
 
@@ -1041,6 +1137,15 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         } else if (gamepad2.dpad_down) {
             servo2Pos -= SERVO2_RATE * dt;
         }
+        if (gamepad2.dpadLeftWasPressed()) {
+            motor0b.setPower(motor0b.getPower() + .1);
+            motor1b.setPower(motor1b.getPower() + .1);
+        }
+        if (gamepad2.dpadLeftWasPressed()) {
+            motor0b.setPower(motor0b.getPower() - .1);
+            motor1b.setPower(motor1b.getPower() - .1);
+        }
+
 
         servo2Pos = Math.max(SERVO2_MIN, Math.min(SERVO2_MAX, servo2Pos));
         servo2.setPosition(servo2Pos);
@@ -1050,7 +1155,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
             getData();
         }
         // TRIANGLE toggles motif listener (Limelight looking for gpp/pgp/ppg)
-        if (gamepad2.a && !wasMotifListenTogglePressed) {
+        if (gamepad2.x && !wasMotifListenTogglePressed) {
             motifListenEnabled = !motifListenEnabled;
 
             // When turning ON, clear any previously latched motif so it can re-latch
@@ -1061,7 +1166,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 // lastTagDistanceIn = -1; // optional
             }
         }
-        wasMotifListenTogglePressed = gamepad2.a;
+        wasMotifListenTogglePressed = gamepad2.x;
 
 
         // --- Kick ONLY (no tray rotation) on gamepad2 right trigger ---
@@ -1073,6 +1178,10 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         }
         // --- Manual SHOOT tray advance (mag2/mag3) one slot, NO kick, on gamepad2 right bumper ---
         if (gamepad2.right_bumper && !wasShootAdvancePressed) {
+            motor0.setPower(0);
+            motor1.setPower(0);
+            motor2.setPower(0);
+            motor3.setPower(0);
             stepShootTrayOneSlotNoKick();
         }
         wasShootAdvancePressed = gamepad2.right_bumper;
@@ -1080,10 +1189,11 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
         wasKickTrigger = kickTrigger;
 
-        if (gamepad2.b && !wasStepShootPressed) {
+        if (gamepad2.y && !wasStepShootPressed) {
             stepToNextSlotAndShoot();
         }
         wasStepShootPressed = gamepad2.b;
+
     }
 
     private void sticks2() {
@@ -1099,50 +1209,65 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     }
 
     private void sticks1() {
-        RSX = -gamepad1.right_stick_x;
+        LSX = -gamepad1.right_stick_x;
         LSY = gamepad1.left_stick_y;
-        LSX = -gamepad1.left_stick_x;
+        RSX = -gamepad1.left_stick_x;
         sticks2();
 
     }
+    private boolean wasZeroPressed = false;
 
     private void sticks4() {
-        double yawDeg = imu1.getAngularOrientation(
-                AxesReference.INTRINSIC,
-                AxesOrder.ZYX,
-                AngleUnit.DEGREES
-        ).firstAngle;
-
-        double yawRad = Math.toRadians(yawDeg);
-
-        double correctedDrive =  drivePower * Math.cos(yawRad) + strafePower * Math.sin(yawRad);
-        double correctedStrafe = -drivePower * Math.sin(yawRad) + strafePower * Math.cos(yawRad);
-
-        correctedDrivePower = correctedDrive;
-        correctedStrafePower = correctedStrafe;
+        // Robot-centric: no IMU, no rotation correction
+        correctedDrivePower  = drivePower;   // forward/back
+        correctedStrafePower = strafePower;  // strafe left/right
 
         drive2();
-        telemetry.addData("IMU yaw (deg)", "%.1f", yawDeg);
     }
 
     private void drive2() {
-        motor0.setPower((correctedDrivePower - correctedStrafePower) - rotatePower);
-        motor2.setPower((correctedDrivePower + correctedStrafePower) + rotatePower);
-        motor3.setPower((correctedDrivePower - correctedStrafePower) + rotatePower);
-        motor1.setPower((correctedDrivePower + correctedStrafePower) - rotatePower);
-    }
-    /*
-    private void lights(){
-        if (gamepad2.options && !wasButtonAPressed) {
-            isRedOn = !isRedOn;
-            redLED.setState(isRedOn);
-        }
-        wasButtonAPressed = gamepad2.x;
+        double y  = correctedDrivePower;   // forward
+        double x  = correctedStrafePower;  // strafe
+        double rx = rotatePower;           // turn
 
-        if (gamepad2.share && !wasButtonBPressed) {
-            isBlueOn = !isBlueOn;
-            blueLED.setState(isBlueOn);
+        double fl = y + x + rx; // motor2
+        double fr = y - x - rx; // motor0
+        double bl = y - x + rx; // motor1
+        double br = y + x - rx; // motor3
+
+        double max = Math.max(1.0,
+                Math.max(Math.abs(fl),
+                        Math.max(Math.abs(fr),
+                                Math.max(Math.abs(bl), Math.abs(br)))));
+
+        motor2.setPower(fl / max);
+        motor0.setPower(fr / max);
+        motor1.setPower(bl / max);
+        motor3.setPower(br / max);
+    }
+
+
+    private boolean wasRedToggle = false;
+    private boolean wasBlueToggle = false;
+
+    private void lights() {
+        // Toggle RED with gamepad2.options
+        if (gamepad2.options && !wasRedToggle) {
+            isRedOn = !isRedOn;
+            // Many REV digital outputs are "active low" depending on wiring:
+            redLED.setState(!isRedOn);  // if backwards, change to redLED.setState(isRedOn)
         }
-        wasButtonBPressed = gamepad2.y;
-    }*/
+        wasRedToggle = gamepad2.options;
+
+        // Toggle BLUE with gamepad2.share
+        if (gamepad2.share && !wasBlueToggle) {
+            isBlueOn = !isBlueOn;
+            blueLED.setState(!isBlueOn); // if backwards, change to blueLED.setState(isBlueOn)
+        }
+        wasBlueToggle = gamepad2.share;
+    }
+
+
+
 }
+
