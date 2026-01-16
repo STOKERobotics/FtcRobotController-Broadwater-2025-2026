@@ -1141,7 +1141,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
             motor0b.setPower(motor0b.getPower() + .1);
             motor1b.setPower(motor1b.getPower() + .1);
         }
-        if (gamepad2.dpadLeftWasPressed()) {
+        if (gamepad2.dpadRightWasPressed()) {
             motor0b.setPower(motor0b.getPower() - .1);
             motor1b.setPower(motor1b.getPower() - .1);
         }
@@ -1149,7 +1149,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
         servo2Pos = Math.max(SERVO2_MIN, Math.min(SERVO2_MAX, servo2Pos));
         servo2.setPosition(servo2Pos);
-        //telemetry.addData("Shooter Position", "%.3f", servo2.getPosition());
+        telemetry.addData("Shooter Position", "%.3f", servo2.getPosition());
 
         if (gamepad1.right_bumper) {
             getData();
