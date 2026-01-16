@@ -45,17 +45,17 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     private BNO055IMU imu1;
     private AnalogInput laser;
 
-    private DigitalChannel mag0;
-    private DigitalChannel mag1;
-    private DigitalChannel mag2;
-    private DigitalChannel mag3;
+    private DigitalChannel mag0; // intake mag0
+    private DigitalChannel mag1; // intake mag1
+    private DigitalChannel mag2; // shooter mag2
+    private DigitalChannel mag3; // shooter mag3
 
     private NormalizedColorSensor ballColor;
 
     // -------------------- Limelight --------------------
     private Limelight3A limelight;
 
-    // Align
+    // Align (same as TeleOp)
     private static final double ALIGN_KP = 0.03;
     private static final double ALIGN_TOLERANCE = 1.0;   // deg
     private static final double ALIGN_MAX_POWER = 0.3;
@@ -63,42 +63,59 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     // Shooter angle mapping
     private static final double SHOOTER_MIN_DIST = 50.0;   // inches
     private static final double SHOOTER_MAX_DIST = 120.0;  // inches
-
     private static final double SERVO_MIN_ANGLE = 0.25;
     private static final double SERVO_MAX_ANGLE = 0.85;
 
-    // Kicker timing (single tap like your revised TeleOp)
-    private static final double KICK_EXTEND_POS = 1.0;
-    private static final double KICK_RETRACT_POS = 0.0;
-    private static final long   KICK_DURATION_MS = 350;
+    // -------------------- Kicker (MATCH TELEOP) --------------------
+    // NOTE: If your kicker is reversed in Auto, swap these two.
+    private static final double KICK_EXTEND_POS  = 0.0;
+    private static final double KICK_RETRACT_POS = 1.0;
+    private static final long   KICK_DURATION_MS = 1000;
 
-    // Servo2 manual adjust (used in MANUAL fallback)
+    // Servo2 manual adjust (MANUAL fallback)
     private double servo2Pos = 0.5;
     private static final double SERVO2_MIN = 0.0;
     private static final double SERVO2_MAX = 1.0;
     private static final double SERVO2_RATE = 0.6;
     private double lastServo2Time = 0.0;
 
-    // Motif latch
+    // -------------------- Motif latch --------------------
     private boolean motifLatched = false;
     private int latchedTagId = -1;
     private String latchedMotif = "NONE";
     private double lastTagDistanceIn = -1;
 
-    // Merry-go-round intake
+    // -------------------- Tray / Intake (PORTED FROM TELEOP) --------------------
     private enum INTAKEState { INIT_TO_SLOT0, WAIT_COLOR_0, MOVE_TO_SLOT1, WAIT_COLOR_1, MOVE_TO_SLOT2, WAIT_COLOR_2, DONE }
     private INTAKEState intakeState = INTAKEState.INIT_TO_SLOT0;
 
-    private boolean colorLatched = false; // edge detect
-    private static final double MGR_POWER = 1.0;
-    private static final long MGR_MOVE_TIMEOUT_MS = 2000;
+    private int currentSlot = 0;
+    private boolean colorLatched = false; // edge detect so one ball = one store
 
-    // Slot storage + fired tracking
+    // Fired tracking
     private final boolean[] slotFired = new boolean[3];
     private final String[] slots = new String[3]; // "g" or "p"
     private String ballColorValue;
 
-    // -------------------- SEQUENCE ENGINE (kept) --------------------
+    // Tray motion tuning (match TeleOp)
+    private boolean shootingBusy = false;
+
+    private static final double MGR_FAST_POWER   = 0.25;
+    private static final double MGR_CRAWL_POWER  = 0.10;
+    private static final long   MGR_BRAKE_MS     = 0;
+    private static final double MGR_BRAKE_POWER  = -0.30;
+    private static final double MGR_BACKUP_POWER   = -0.0;
+    private static final long   MGR_BACKUP_1DEG_MS = 0;
+
+    private static final long MGR_MOVE_TIMEOUT_MS = 10000;
+
+    // Intake->Shoot mapping (TeleOp uses an offset)
+    private static final int INTAKE_TO_SHOOT_OFFSET = 1;
+
+    // Which direction is "next" while intaking
+    private static final int INTAKE_SLOT_STEP = +1;
+
+    // -------------------- SEQUENCE ENGINE --------------------
     private enum ControlMode { MANUAL, SEQUENCE }
     private ControlMode controlMode = ControlMode.SEQUENCE;
 
@@ -177,15 +194,17 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
     private static final double POS_TOL_M    = 0.05; // 5cm
     private static final double ANG_TOL_DEG  = 3.0;
-    private static final int RED_TAG_ID  = 21;  // <-- put your real red tag ID here
-    private static final int BLUE_TAG_ID = 22;  // <-- put your real blue tag ID here
+
+    // Your alliance tag selection (used only in alignToTarget())
+    private static final int RED_TAG_ID  = 21;
+    private static final int BLUE_TAG_ID = 22;
 
     private enum Alliance { RED, BLUE }
-    private Alliance alliance = Alliance.RED; // default; you can change this later
+    private Alliance alliance = Alliance.RED;
 
     // ===== EDIT YOUR SEQUENCE HERE =====
     private final Command[] sequence = new Command[] {
-            //Command.driveTo(0.00, 0.00, 0, 5000),
+            // Command.intakeUntilFull(8000),
             Command.alignToTag(3000),
             Command.shootMotif(0),
             Command.done()
@@ -223,9 +242,9 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         mag2 = hardwareMap.get(DigitalChannel.class, "mag2");
         mag3 = hardwareMap.get(DigitalChannel.class, "mag3");
 
-        // -------------------- Motor directions (match revised TeleOp) --------------------
+        // -------------------- Motor directions (match TeleOp) --------------------
         motor0.setDirection(DcMotor.Direction.FORWARD);
-        motor1.setDirection(DcMotor.Direction.REVERSE); // IMPORTANT: TeleOp uses REVERSE
+        motor1.setDirection(DcMotor.Direction.REVERSE);
         motor2.setDirection(DcMotor.Direction.FORWARD);
         motor3.setDirection(DcMotor.Direction.FORWARD);
 
@@ -251,12 +270,15 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         motor1b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         motor2b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
-        // Servo init
+        // -------------------- Servo init (match TeleOp) --------------------
         servo0.setPosition(KICK_RETRACT_POS);
         servo2.setPosition(servo2Pos);
         lastServo2Time = getRuntime();
 
-        // IMU init (kept for MANUAL field-centric fallback)
+        // Tray direction (match TeleOp)
+        servo1.setDirection(DcMotorSimple.Direction.REVERSE);
+
+        // -------------------- IMU init (for MANUAL field-centric fallback) --------------------
         BNO055IMU.Parameters imuParameters = new BNO055IMU.Parameters();
         imuParameters.angleUnit = BNO055IMU.AngleUnit.DEGREES;
         imuParameters.accelUnit = BNO055IMU.AccelUnit.METERS_PERSEC_PERSEC;
@@ -268,37 +290,37 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
             ((SwitchableLight) ballColor).enableLight(true);
         }
 
+        // Magnet inputs
+        mag0.setMode(DigitalChannel.Mode.INPUT);
+        mag1.setMode(DigitalChannel.Mode.INPUT);
+        mag2.setMode(DigitalChannel.Mode.INPUT);
+        mag3.setMode(DigitalChannel.Mode.INPUT);
+
         // Sequence setup
         controlMode = ControlMode.SEQUENCE;
         seqIndex = 0;
         stepStartMs = System.currentTimeMillis();
 
-
         waitForStart();
 
         while (opModeIsActive()) {
 
-            // Cancel sequence if needed
             if (gamepad1.back && controlMode == ControlMode.SEQUENCE) cancelSequence();
 
             // Always update telemetry + latching
             getData();
             telemetryLimeLight();
 
-            // Optional: if you want these always on like TeleOp, uncomment
-            // motor0b.setPower(1);
-            // motor1b.setPower(1);
-            // motor2b.setPower(1);
-
             if (controlMode == ControlMode.SEQUENCE) {
                 runSequence();
             } else {
-                // MANUAL fallback uses your revised TeleOp-style IMU field-centric
+                // MANUAL fallback uses your TeleOp-style IMU field-centric
                 sticksManualTeleopStyle();
                 buttonsManualServo2();
-                updateBallColor();
+
+                if (intakeState != INTAKEState.DONE) updateBallColor();
                 merryGoRoundIntake();
-                telemetryBallColor();
+                if (intakeState != INTAKEState.DONE) telemetryBallColor();
             }
 
             // Laser telemetry
@@ -337,10 +359,8 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
             double xIn = targetCam.getPosition().x * 39.37;
             double yIn = targetCam.getPosition().y * 39.37;
             double zIn = targetCam.getPosition().z * 39.37;
-
-            double distTag = Math.sqrt(xIn * xIn + yIn * yIn + zIn * zIn);
-            lastTagDistanceIn = distTag;
-            telemetry.addData("Distance from tag (in)", "%.1f", distTag);
+            lastTagDistanceIn = Math.sqrt(xIn * xIn + yIn * yIn + zIn * zIn);
+            telemetry.addData("Distance from tag (in)", "%.1f", lastTagDistanceIn);
         } else {
             lastTagDistanceIn = -1;
             telemetry.addLine("TagCam: none");
@@ -556,7 +576,6 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
         int wantedId = getAllianceTagId();
 
-        // Find best matching tag by ID
         LLResultTypes.FiducialResult best = getBestFiducialById(result, wantedId);
         if (best == null) {
             telemetry.addData("Alignment", "No %s tag detected (id=%d)",
@@ -565,7 +584,6 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
             return false;
         }
 
-        // Compute tx (deg) for THIS fiducial from camera-space pose
         Pose3D camPose = best.getTargetPoseCameraSpace();
         if (camPose == null) {
             telemetry.addLine("Alignment: tag pose missing");
@@ -573,19 +591,14 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
             return false;
         }
 
-        // In camera space: +x is right, +z is forward (Limelight pose)
         double x = camPose.getPosition().x;
         double z = camPose.getPosition().z;
-
-        // Horizontal angle offset in degrees (tx-like)
         double tx = Math.toDegrees(Math.atan2(x, z));
 
         if (Math.abs(tx) <= ALIGN_TOLERANCE) {
             stopDrive();
             telemetry.addData("Alignment", "Aligned to %s!",
                     (alliance == Alliance.RED ? "RED" : "BLUE"));
-
-            // Latch motif + distance FROM THIS TAG
             latchMotifAndDistanceFromFiducial(best);
             return true;
         }
@@ -600,90 +613,10 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         return false;
     }
 
-    // -------------------- Shooter + motif firing --------------------
-    private void adjustShooterAndFire() {
-        if (!motifLatched || latchedMotif == null || latchedMotif.length() != 3 || "UNKNOWN".equals(latchedMotif)) {
-            telemetry.addLine("Shooter: No valid motif latched");
-            return;
-        }
-        if (!allSlotsLoaded()) {
-            telemetry.addLine("Shooter: Slots not all loaded yet");
-            telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
-            return;
-        }
-        if (lastTagDistanceIn <= 0) {
-            telemetry.addLine("Shooter: No tag distance");
-            return;
-        }
-
-        double distanceInches = lastTagDistanceIn;
-        double normalized = Math.max(0, Math.min(1,
-                (distanceInches - SHOOTER_MIN_DIST) / (SHOOTER_MAX_DIST - SHOOTER_MIN_DIST)));
-
-        double servoAngle = SERVO_MAX_ANGLE - (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) * normalized;
-        servo2.setPosition(servoAngle);
-
-        telemetry.addData("Motif", latchedMotif);
-        telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
-        telemetry.addData("Dist(in)", "%.1f", distanceInches);
-        telemetry.addData("Shooter Angle", "%.2f", servoAngle);
-        telemetry.update();
-
-        for (int i = 0; i < 3; i++) slotFired[i] = false;
-
-        char[] order = latchedMotif.toCharArray();
-
-        for (int shotIndex = 0; shotIndex < 3 && opModeIsActive(); shotIndex++) {
-            char wanted = order[shotIndex];
-
-            int slotToShoot = findSlotForColor(wanted);
-            if (slotToShoot < 0) {
-                telemetry.addData("Shooter", "Missing color '%c' in slots (or already used)", wanted);
-                telemetry.update();
-                return;
-            }
-
-            telemetry.addData("Shooting", "shot %d wants %c -> slot %d", shotIndex, wanted, slotToShoot);
-            telemetry.update();
-
-            rotateToSlotBlocking(slotToShoot);
-
-            // Single-tap kick (TeleOp-aligned)
-            kickOnce();
-
-            slotFired[slotToShoot] = true;
-            sleep(120);
-        }
-
-        telemetry.addLine("Shoot sequence done!");
+    private int getAllianceTagId() {
+        return (alliance == Alliance.RED) ? RED_TAG_ID : BLUE_TAG_ID;
     }
 
-    private void kickOnce() {
-        servo0.setPosition(KICK_EXTEND_POS);
-        sleep(KICK_DURATION_MS);
-        servo0.setPosition(KICK_RETRACT_POS);
-    }
-
-    private boolean allSlotsLoaded() {
-        return slots[0] != null && slots[1] != null && slots[2] != null;
-    }
-
-    private int findSlotForColor(char wanted) {
-        String w = String.valueOf(wanted);
-        for (int i = 0; i < 3; i++) {
-            if (!slotFired[i] && w.equals(slots[i])) return i;
-        }
-        return -1;
-    }
-
-    private boolean atShootSlot(int slot) {
-        switch (slot) {
-            case 0: return atShootSlot0();
-            case 1: return atShootSlot1();
-            case 2: return atShootSlot2();
-            default: return false;
-        }
-    }
     private LLResultTypes.FiducialResult getBestFiducialById(LLResult result, int wantedId) {
         List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
         if (tags == null || tags.isEmpty()) return null;
@@ -719,17 +652,191 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         }
     }
 
-    private void rotateToSlotBlocking(int targetSlot) {
-        long start = System.currentTimeMillis();
-        servo1.setPower(MGR_POWER);
+    // -------------------- Shooter + motif firing (FIXED TO MATCH TELEOP) --------------------
+    private void adjustShooterAndFire() {
+        if (!motifLatched || latchedMotif == null || latchedMotif.length() != 3 || "UNKNOWN".equals(latchedMotif)) {
+            telemetry.addLine("Shooter: No valid motif latched");
+            return;
+        }
+        if (!allSlotsLoaded()) {
+            telemetry.addLine("Shooter: Slots not all loaded yet");
+            telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
+            return;
+        }
+        if (lastTagDistanceIn <= 0) {
+            telemetry.addLine("Shooter: No tag distance");
+            return;
+        }
 
-        while (opModeIsActive() && !atShootSlot(targetSlot)
-                && (System.currentTimeMillis() - start) < MGR_MOVE_TIMEOUT_MS) {
+        double distanceInches = lastTagDistanceIn;
+        double normalized = Math.max(0, Math.min(1,
+                (distanceInches - SHOOTER_MIN_DIST) / (SHOOTER_MAX_DIST - SHOOTER_MIN_DIST)));
 
-            telemetry.addData("Rotating to shoot slot", targetSlot);
-            telemetry.addData("Mag2", mag2.getState());
-            telemetry.addData("Mag3", mag3.getState());
+        double servoAngle = SERVO_MAX_ANGLE - (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) * normalized;
+        servo2.setPosition(servoAngle);
+
+        telemetry.addData("Motif", latchedMotif);
+        telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
+        telemetry.addData("Dist(in)", "%.1f", distanceInches);
+        telemetry.addData("Shooter Angle", "%.2f", servoAngle);
+        telemetry.update();
+
+        for (int i = 0; i < 3; i++) slotFired[i] = false;
+
+        char[] order = latchedMotif.toCharArray();
+
+        for (int shotIndex = 0; shotIndex < 3 && opModeIsActive(); shotIndex++) {
+            char wanted = order[shotIndex];
+
+            int intakeSlotToShoot = findSlotForColor(wanted);
+            if (intakeSlotToShoot < 0) {
+                telemetry.addData("Shooter", "Missing color '%c' in slots (or already used)", wanted);
+                telemetry.update();
+                return;
+            }
+
+            telemetry.addData("Shooting", "shot %d wants %c -> intakeSlot %d", shotIndex, wanted, intakeSlotToShoot);
             telemetry.update();
+
+            // IMPORTANT: convert intake slot to the shooter-frame slot (ported from TeleOp)
+            int shootFrameSlot = intakeSlotToShootSlot(intakeSlotToShoot);
+
+            rotateToShootSlotBlocking(shootFrameSlot);
+            kickOnce();
+            slotFired[intakeSlotToShoot] = true;
+
+            sleep(120);
+        }
+
+        telemetry.addLine("Shoot sequence done!");
+    }
+
+    private void kickOnce() {
+        ensureKickerRetracted();
+        servo0.setPosition(KICK_EXTEND_POS);
+        sleep(KICK_DURATION_MS);
+        servo0.setPosition(KICK_RETRACT_POS);
+    }
+
+    private void ensureKickerRetracted() {
+        servo0.setPosition(KICK_RETRACT_POS);
+    }
+
+    private boolean allSlotsLoaded() {
+        return slots[0] != null && slots[1] != null && slots[2] != null;
+    }
+
+    private int findSlotForColor(char wanted) {
+        String w = String.valueOf(wanted);
+        for (int i = 0; i < 3; i++) {
+            if (!slotFired[i] && w.equals(slots[i])) return i;
+        }
+        return -1;
+    }
+
+    private int intakeSlotToShootSlot(int intakeSlot) {
+        return (intakeSlot + INTAKE_TO_SHOOT_OFFSET + 3) % 3;
+    }
+
+    // -------------------- Tray: slot detectors (MATCH TELEOP) --------------------
+    // Intake slot detectors (mag0/mag1)
+    private boolean atSlot0() { return !mag0.getState() && !mag1.getState(); }
+    private boolean atSlot1() { return !mag0.getState() &&  mag1.getState(); }
+    private boolean atSlot2() { return  mag0.getState() && !mag1.getState(); }
+
+    // Shooter slot detectors (mag2/mag3)  <-- FIXED to match your TeleOp mapping
+    private boolean atShootSlot0() { return !mag2.getState() &&  mag3.getState(); }
+    private boolean atShootSlot1() { return !mag2.getState() && !mag3.getState(); }
+    private boolean atShootSlot2() { return  mag2.getState() && !mag3.getState(); }
+
+    private boolean atShootSlot(int slot) {
+        switch (slot) {
+            case 0: return atShootSlot0();
+            case 1: return atShootSlot1();
+            case 2: return atShootSlot2();
+            default: return false;
+        }
+    }
+
+    private boolean atIntakeSlot(int slot) {
+        switch (slot) {
+            case 0: return atSlot0();
+            case 1: return atSlot1();
+            case 2: return atSlot2();
+            default: return false;
+        }
+    }
+
+    // -------------------- Tray: improved rotate blocking (PORTED FROM TELEOP) --------------------
+    private void rotateToShootSlotBlocking(int targetSlot) {
+        shootingBusy = true;
+        try {
+            ensureKickerRetracted();
+
+            // If already sitting in the target window, force leave first
+            if (atShootSlot(targetSlot)) {
+                long leaveStart = System.currentTimeMillis();
+                servo1.setPower(MGR_CRAWL_POWER);
+                while (opModeIsActive()
+                        && atShootSlot(targetSlot)
+                        && (System.currentTimeMillis() - leaveStart) < 400) {
+                    idle();
+                }
+                servo1.setPower(0);
+            }
+
+            long start = System.currentTimeMillis();
+            servo1.setPower(MGR_FAST_POWER);
+
+            while (opModeIsActive()
+                    && !atShootSlot(targetSlot)
+                    && (System.currentTimeMillis() - start) < MGR_MOVE_TIMEOUT_MS) {
+                idle();
+            }
+            servo1.setPower(0);
+
+            if (!atShootSlot(targetSlot)) return; // timeout safety
+
+            // Brake tap
+            servo1.setPower(MGR_BRAKE_POWER);
+            sleep(MGR_BRAKE_MS);
+            servo1.setPower(0);
+
+            // Optional small reverse nudge
+            rotateTrayBackOneDegree();
+
+        } finally {
+            servo1.setPower(0);
+            shootingBusy = false;
+        }
+    }
+
+    private void rotateTrayBackOneDegree() {
+        servo1.setPower(MGR_BACKUP_POWER);
+        sleep(MGR_BACKUP_1DEG_MS);
+        servo1.setPower(0);
+    }
+
+    private void rotateToIntakeSlotBlocking(int targetSlot) {
+        ensureKickerRetracted();
+
+        if (atIntakeSlot(targetSlot)) {
+            long leaveStart = System.currentTimeMillis();
+            servo1.setPower(MGR_CRAWL_POWER);
+            while (opModeIsActive()
+                    && atIntakeSlot(targetSlot)
+                    && (System.currentTimeMillis() - leaveStart) < 400) {
+                idle();
+            }
+            servo1.setPower(0);
+        }
+
+        long start = System.currentTimeMillis();
+        servo1.setPower(MGR_FAST_POWER);
+
+        while (opModeIsActive()
+                && !atIntakeSlot(targetSlot)
+                && (System.currentTimeMillis() - start) < MGR_MOVE_TIMEOUT_MS) {
             idle();
         }
 
@@ -784,8 +891,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         for (int i = 0; i < tags.size(); i++) {
             LLResultTypes.FiducialResult t = tags.get(i);
             int id = t.getFiducialId();
-            String motif = decodeMotifFromTagId(id);
-            telemetry.addData("April Tag Motif", motif);
+            telemetry.addData("April Tag Motif", decodeMotifFromTagId(id));
         }
     }
 
@@ -803,11 +909,11 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         return best.getTargetPoseCameraSpace();
     }
 
-    // -------------------- Ball color + intake --------------------
+    // -------------------- Ball color + intake (PORTED STATE MACHINE) --------------------
     private void telemetryBallColor() {
         NormalizedRGBA c = ballColor.getNormalizedColors();
         float[] hsv = new float[3];
-        Color.RGBToHSV((int) (c.red * 255), (int) (c.green * 255), (int) (c.blue * 255), hsv);
+        Color.RGBToHSV((int)(c.red*255), (int)(c.green*255), (int)(c.blue*255), hsv);
 
         telemetry.addData("BallHue", "%.0f", hsv[0]);
         telemetry.addData("Ball HSV", "H=%.0f S=%.2f V=%.2f", hsv[0], hsv[1], hsv[2]);
@@ -815,15 +921,14 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         telemetry.addData("Ball", ballColorValue);
     }
 
-    // Match your revised TeleOp thresholds
     private void updateBallColor() {
         NormalizedRGBA c = ballColor.getNormalizedColors();
 
         float[] hsv = new float[3];
         Color.RGBToHSV(
-                (int) (c.red * 255),
-                (int) (c.green * 255),
-                (int) (c.blue * 255),
+                (int)(c.red   * 255),
+                (int)(c.green * 255),
+                (int)(c.blue  * 255),
                 hsv
         );
 
@@ -846,31 +951,60 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         return ballColorValue != null && !ballColorValue.isEmpty();
     }
 
-    // Slot detectors (mag0/mag1)
-    private boolean atSlot0() { return !mag0.getState() && !mag1.getState(); }
-    private boolean atSlot1() { return !mag0.getState() &&  mag1.getState(); }
-    private boolean atSlot2() { return  mag0.getState() && !mag1.getState(); }
-
-    // Shooter slot detectors (mag2/mag3)
-    private boolean atShootSlot0() { return !mag2.getState() && !mag3.getState(); }
-    private boolean atShootSlot1() { return !mag2.getState() &&  mag3.getState(); }
-    private boolean atShootSlot2() { return  mag2.getState() && !mag3.getState(); }
-
     private void assignSlot(int slotNumber) {
         slots[slotNumber] = ballColorValue;
     }
 
+    private int nextIntakeSlot(int current) {
+        return (current + INTAKE_SLOT_STEP + 3) % 3;
+    }
+
+    private INTAKEState waitStateForSlot(int slot) {
+        switch (slot) {
+            case 0: return INTAKEState.WAIT_COLOR_0;
+            case 1: return INTAKEState.WAIT_COLOR_1;
+            case 2: return INTAKEState.WAIT_COLOR_2;
+            default: return INTAKEState.WAIT_COLOR_0;
+        }
+    }
+
+    private boolean isWaitingForColor() {
+        return intakeState == INTAKEState.WAIT_COLOR_0
+                || intakeState == INTAKEState.WAIT_COLOR_1
+                || intakeState == INTAKEState.WAIT_COLOR_2;
+    }
+
     private void merryGoRoundIntake() {
+        if (shootingBusy) {
+            servo1.setPower(0);
+            return;
+        }
+
         boolean seen = colorSeen();
         boolean newColorEvent = seen && !colorLatched;
         if (seen) colorLatched = true;
-        else colorLatched = false;
+        else      colorLatched = false;
+
+        // (Optional) Ported “force skip when waiting and seeing none” using gamepad2.left_bumper in TeleOp.
+        // Auto doesn’t need it, but keeping it harmless for testing:
+        boolean forceSkip = gamepad2.left_bumper;
+        if (forceSkip && isWaitingForColor() && !seen) {
+            int fromSlot = currentSlot;
+            int toSlot = nextIntakeSlot(fromSlot);
+            rotateToIntakeSlotBlocking(toSlot);
+            currentSlot = toSlot;
+            intakeState = waitStateForSlot(toSlot);
+            colorLatched = false;
+            return;
+        }
 
         switch (intakeState) {
             case INIT_TO_SLOT0:
-                servo1.setPower(1);
+                ensureKickerRetracted();
+                servo1.setPower(MGR_FAST_POWER);
                 if (atSlot0()) {
                     servo1.setPower(0);
+                    currentSlot = 0;
                     intakeState = INTAKEState.WAIT_COLOR_0;
                 }
                 break;
@@ -884,9 +1018,11 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
                 break;
 
             case MOVE_TO_SLOT1:
-                servo1.setPower(1);
+                ensureKickerRetracted();
+                servo1.setPower(MGR_FAST_POWER);
                 if (atSlot1()) {
                     servo1.setPower(0);
+                    currentSlot = 1;
                     intakeState = INTAKEState.WAIT_COLOR_1;
                 }
                 break;
@@ -900,9 +1036,11 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
                 break;
 
             case MOVE_TO_SLOT2:
-                servo1.setPower(1);
+                ensureKickerRetracted();
+                servo1.setPower(MGR_FAST_POWER);
                 if (atSlot2()) {
                     servo1.setPower(0);
+                    currentSlot = 2;
                     intakeState = INTAKEState.WAIT_COLOR_2;
                 }
                 break;
@@ -927,16 +1065,13 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
     // -------------------- MANUAL fallback (TeleOp-aligned IMU field-centric) --------------------
     private void sticksManualTeleopStyle() {
-        // same stick convention as your TeleOp
-        double rsx = -gamepad1.right_stick_x;  // turn
-        double lsy =  gamepad1.left_stick_y;   // forward/back
-        double lsx =  gamepad1.left_stick_x;   // strafe
-
+        double rsx = -gamepad1.right_stick_x;
+        double lsy = -gamepad1.left_stick_y;
+        double lsx =  gamepad1.left_stick_x;
         driveByIntentFieldCentric(lsy, lsx, rsx);
     }
 
     private void driveByIntentFieldCentric(double lsy, double lsx, double rsx) {
-        // Read yaw in degrees (ZYX) and convert once
         double yawDeg = imu1.getAngularOrientation(
                 AxesReference.INTRINSIC,
                 AxesOrder.ZYX,
@@ -945,21 +1080,16 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
         double yawRad = Math.toRadians(yawDeg);
 
-        // Rotate inputs by -yaw (field-centric)
         double drivePower  = lsy;
         double strafePower = lsx;
 
         double robotDrive  =  drivePower * Math.cos(yawRad) + strafePower * Math.sin(yawRad);
         double robotStrafe = -drivePower * Math.sin(yawRad) + strafePower * Math.cos(yawRad);
 
-        // Feed into your normal mixer
         driveByIntent(robotDrive, robotStrafe, rsx);
-
         telemetry.addData("IMU yaw (deg)", "%.1f", yawDeg);
     }
-    private int getAllianceTagId() {
-        return (alliance == Alliance.RED) ? RED_TAG_ID : BLUE_TAG_ID;
-    }
+
     private void buttonsManualServo2() {
         double now = getRuntime();
         double dt = now - lastServo2Time;
