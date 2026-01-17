@@ -91,7 +91,7 @@ public class broadwater_robotics_25_26_auto_BLUE extends LinearOpMode {
     private NormalizedColorSensor ballColor;
 
     private String ballColorValue;
-    private double servo2Pos = 0.5;                 // start midpoint (change if you want)
+    private double servo2Pos = 0.65;                 // start midpoint (change if you want)
     private static final double SERVO2_MIN = 0.0;
     private static final double SERVO2_MAX = 1.0;
     private static final double SERVO2_RATE = 0.6;
@@ -256,8 +256,8 @@ public class broadwater_robotics_25_26_auto_BLUE extends LinearOpMode {
 
         waitForStart();
         if (!opModeIsActive()) return;
-        motor0b.setPower(.7);
-        motor1b.setPower(.7);
+        motor0b.setPower(.75);
+        motor1b.setPower(.75);
         motifListenEnabled = true;     // auto must enable it
         motifLatched = false;
         driveForwardMeters(0.1, -0.6);
@@ -292,15 +292,11 @@ public class broadwater_robotics_25_26_auto_BLUE extends LinearOpMode {
            align = alignToTarget();
         }
         telemetry.update();
-        int sCount= 0;
-        while (opModeIsActive() && !shoot){
-            telemetryLimeLight();
-            telemetry.addData("sCount", "0=%s", sCount);
-            telemetry.update();
-            adjustShooterAndFire();
-            sCount += 1;
-
-        }
+        telemetryLimeLight();
+        adjustShooterAndFire();
+        sleep(1000);
+        driveForwardMeters(0.3, -0.6);
+        returnTrayToIntakeSlot0();
     }
 
     // ---------------- Init ----------------
@@ -335,7 +331,7 @@ public class broadwater_robotics_25_26_auto_BLUE extends LinearOpMode {
                 (distanceInches - SHOOTER_MIN_DIST) / (SHOOTER_MAX_DIST - SHOOTER_MIN_DIST)));
 
         double servoAngle = SERVO_MAX_ANGLE - (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) * normalized;
-        servo2.setPosition(.65);
+        servo2.setPosition(servo2Pos);
 
         telemetry.addData("Motif", latchedMotif);
         telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
@@ -365,11 +361,10 @@ public class broadwater_robotics_25_26_auto_BLUE extends LinearOpMode {
             slotFired[slotToShoot] = true;
             slots[slotToShoot] = null;
 
-            sleep(120);
+            sleep(750);
         }
         shoot = true;
         telemetry.addLine("Shoot sequence done!");
-        returnTrayToIntakeSlot0();
     }
 
     private boolean allSlotsLoaded() {
