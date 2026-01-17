@@ -1022,7 +1022,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         motor3.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
     }
     // --- Heading hold fixes ---
-    private static final double HEADING_SIGN = +1.0; // +1 works for most bots; if it still turns wrong, set to -1
+    private static final double HEADING_SIGN = -1.0; // +1 works for most bots; if it still turns wrong, set to -1
     private static final double HEADING_DEADBAND_DEG = 0.25; // was 1.0; start correcting sooner
 
     private void driveForwardMeters(double meters, double power) {
