@@ -266,7 +266,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
         motifListenEnabled = true;     // auto must enable it
         motifLatched = false;
-        driveForwardMeters(1.0, -0.6);
+        driveForwardMeters(0.2, -0.6);
         telemetryLimeLight();
         motifLatched = false;
         latchedMotif = "NONE";
@@ -277,7 +277,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         //driveForwardMeters(0.5, -0.4);
 
         // ---- Turn right 35 degrees ----
-//        turnRightDegrees(35.0, 0.25);
+        turnRightDegrees(35.0, 0.25);
 
         // (Optional) keep running shooter/intake, or stop them:
         // motor0b.setPower(0);
