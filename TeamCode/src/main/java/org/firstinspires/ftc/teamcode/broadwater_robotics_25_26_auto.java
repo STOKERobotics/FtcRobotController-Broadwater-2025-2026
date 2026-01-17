@@ -1075,7 +1075,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         double p = clip(Math.abs(power), 0.0, 1.0);
 
         // sticks2 gain is 0.5 unless left_bumper is held
-        double gain = (gamepad1.left_bumper) ? 1.0 : 0.5;
+        double gain = 0.5;
 
         // Convert desired final forward power -> stick input (pre-gain)
         double stickLSY = clip(dir * (p / gain), -1.0, 1.0);
