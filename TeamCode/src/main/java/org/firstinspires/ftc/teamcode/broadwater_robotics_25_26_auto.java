@@ -264,8 +264,11 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
 
         // ---- Drive forward 1 meter ----
-        driveForwardMeters(1.0, 1.0);
+        driveForwardMeters(1.0, +0.6);
 
+        // ---- Drive backward 0.5 meter ----
+        //driveForwardMeters(0.5, -0.4);
+        
         // ---- Turn right 35 degrees ----
         turnRightDegrees(35.0, 0.25);
 
@@ -1018,62 +1021,70 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     private void driveForwardMeters(double meters, double power) {
         setDriveRunUsingEncoder();
 
-        // meters -> wheel ticks (wheel circumference is still correct for forward motion)
-        int ticksTarget = (int) Math.round((Math.abs(meters) / WHEEL_CIRCUMFERENCE_M) * TICKS_PER_WHEEL_REV);
+        // Distance is always magnitude
+        double distM = Math.abs(meters);
+        if (distM < 1e-6) return; // nothing to do
 
-        // Your mapping: LSY + = forward, - = backward
-        int dir = (meters >= 0) ? +1 : -1;
+        // Direction comes ONLY from power sign
+        if (Math.abs(power) < 1e-6) {
+            stopDrive();
+            return;
+        }
+        int dir = (power >= 0) ? +1 : -1; // +forward, -backward
 
-        // Record start encoder positions (SIGNED)
+        // meters -> ticks target
+        int ticksTarget = (int) Math.round((distM / WHEEL_CIRCUMFERENCE_M) * TICKS_PER_WHEEL_REV);
+
+        // Start encoders
         int startFR = motor0.getCurrentPosition();
         int startBL = motor1.getCurrentPosition();
         int startFL = motor2.getCurrentPosition();
         int startBR = motor3.getCurrentPosition();
 
+        // Magnitude of requested power (0..1)
         double p = clip(Math.abs(power), 0.0, 1.0);
 
-        // sticks2 gain is 0.5 unless left_bumper is held (auto usually not holding it)
+        // sticks2 gain is 0.5 unless left_bumper is held
         double gain = (gamepad1.left_bumper) ? 1.0 : 0.5;
+
+        // Convert desired final power -> stick input (pre-gain)
         double stickLSY = clip(dir * (p / gain), -1.0, 1.0);
 
         long startMs = System.currentTimeMillis();
         long timeoutMs = 6000;
 
         while (opModeIsActive() && (System.currentTimeMillis() - startMs) < timeoutMs) {
-
             int dFR = motor0.getCurrentPosition() - startFR; // FR
             int dBL = motor1.getCurrentPosition() - startBL; // BL (motor1 is REVERSE)
             int dFL = motor2.getCurrentPosition() - startFL; // FL
             int dBR = motor3.getCurrentPosition() - startBR; // BR
 
-// Flip BL encoder delta because motor1 is Direction.REVERSE
+            // Flip BL encoder delta because motor1 direction is REVERSE
             int dBL_fixed = -dBL;
 
-// Mecanum forward-axis ticks (signed)
+            // Mecanum forward-axis ticks (signed)
             double forwardTicks = (dFL + dFR + dBL_fixed + dBR) / 4.0;
-
 
             if (Math.abs(forwardTicks) >= ticksTarget) break;
 
-            // Virtual sticks: forward only
+            // Virtual sticks: forward/back only (sign comes from stickLSY)
             LSY = (float) stickLSY;
             LSX = 0f;
             RSX = 0f;
-
             sticks2();
 
-            telemetry.addData("DriveFwd", "m=%.2f target=%d fwdTicks=%.0f",
-                    meters, ticksTarget, forwardTicks);
-            telemetry.addData("Enc d", "FL=%d FR=%d BL=%d BR=%d", dFL, dFR, dBL, dBR);
+            telemetry.addData("DriveFB", "dist=%.2fm target=%d fwdTicks=%.0f stickLSY=%.2f",
+                    distM, ticksTarget, forwardTicks, stickLSY);
             telemetryUpdateThrottled();
             idle();
         }
 
-        // stop
+        // Stop and clear sticks
         LSY = 0f; LSX = 0f; RSX = 0f;
         sticks2();
         stopDrive();
     }
+
 
 
     private double getYawDeg() {
