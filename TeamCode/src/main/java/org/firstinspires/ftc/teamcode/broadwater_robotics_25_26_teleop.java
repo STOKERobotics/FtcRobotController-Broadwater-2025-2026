@@ -309,13 +309,14 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         waitForStart();
 
         if (opModeIsActive()) {
-            shooterBasePower = 0.70;
+//            shooterBasePower = 0.70;
 //            shooterTargetRPM = 3000;
-
+            motor0b.setPower(0.7);
+            motor1b.setPower(0.7);
             motor2b.setPower(1);
             while (opModeIsActive()) {
 //                setShooterRPM(shooterTargetRPM);
-                balanceShooterRPM(shooterBasePower);
+//                balanceShooterRPM(shooterBasePower);
                 telemetry.clear();
 
                 lights();
@@ -1324,14 +1325,14 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 //        shooterTargetRPM = Math.max(0, shooterTargetRPM);
 
         if (gamepad2.dpadRightWasPressed()) {
-            shooterBasePower += 0.1;
+//            shooterBasePower += 0.1;
 
 
             motor0b.setPower(motor0b.getPower() + .1);
             motor1b.setPower(motor1b.getPower() + .1);
         }
         if (gamepad2.dpadLeftWasPressed()) {
-            shooterBasePower -= 0.1;
+//            shooterBasePower -= 0.1;
 
             motor0b.setPower(motor0b.getPower() - .1);
             motor1b.setPower(motor1b.getPower() - .1);
