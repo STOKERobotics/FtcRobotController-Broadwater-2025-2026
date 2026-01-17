@@ -116,7 +116,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
     // Merry-go-round state machine
     private enum INTAKEState { INIT_TO_SLOT0, WAIT_COLOR_0, MOVE_TO_SLOT1, WAIT_COLOR_1, MOVE_TO_SLOT2, WAIT_COLOR_2, DONE }
-    private broadwater_robotics_25_26_teleop.INTAKEState intakeState = broadwater_robotics_25_26_teleop.INTAKEState.INIT_TO_SLOT0;
+    private INTAKEState intakeState = INTAKEState.INIT_TO_SLOT0;
 
     private int currentSlot = 0;
     private boolean colorLatched = false; // edge-detect so one ball = one store
@@ -278,7 +278,16 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
         // ---- Turn right 35 degrees ----
         turnRightDegrees(35.0, 0.25);
-        alignToTarget();
+        while (opModeIsActive() && intakeState != INTAKEState.DONE) {
+            updateBallColor();
+            merryGoRoundIntake();
+            telemetryBallColor();
+
+            telemetry.update(); // flush to Driver Station
+            idle();
+        }
+
+            alignToTarget();
         // (Optional) keep running shooter/intake, or stop them:
         // motor0b.setPower(0);
         // motor1b.setPower(0);
