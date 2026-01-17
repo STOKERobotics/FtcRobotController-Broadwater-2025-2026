@@ -138,7 +138,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
 
     // Merry-go-round state machine
-    private enum INTAKEState { INIT_TO_SLOT0, WAIT_COLOR_0, MOVE_TO_SLOT1, WAIT_COLOR_1, MOVE_TO_SLOT2, WAIT_COLOR_2, DONE }
+    enum INTAKEState { INIT_TO_SLOT0, WAIT_COLOR_0, MOVE_TO_SLOT1, WAIT_COLOR_1, MOVE_TO_SLOT2, WAIT_COLOR_2, DONE }
     private INTAKEState intakeState = INTAKEState.INIT_TO_SLOT0;
 
     private int currentSlot = 0;
