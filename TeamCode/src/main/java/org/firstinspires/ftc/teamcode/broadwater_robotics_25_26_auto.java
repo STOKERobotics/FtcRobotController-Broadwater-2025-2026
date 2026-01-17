@@ -271,7 +271,10 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         motifLatched = false;
         latchedMotif = "NONE";
         latchedTagId = -1;
-        updateMotifListener();
+
+        while(opModeIsActive() && !motifLatched) {
+            updateMotifListener();
+        }
 
         // ---- Drive backward 0.5 meter ----
         //driveForwardMeters(0.5, -0.4);
@@ -280,13 +283,14 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         turnRightDegrees(35.0, 0.25);
         while (opModeIsActive() && intakeState != INTAKEState.DONE) {
             updateBallColor();
-            merryGoRoundIntake();
+//            merryGoRoundIntake();
             telemetryBallColor();
 
-            telemetry.update(); // flush to Driver Station
+//            telemetry.update(); // flush to Driver Station
             idle();
         }
-
+        sleep(5000);
+        sleep(5000);
             alignToTarget();
         sleep(5000);
         sleep(5000);

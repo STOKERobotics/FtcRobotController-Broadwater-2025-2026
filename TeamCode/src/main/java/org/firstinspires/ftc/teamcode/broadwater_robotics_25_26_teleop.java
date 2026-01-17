@@ -194,6 +194,26 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
     private double shooterBasePower = 0.60; // "set power" you want (update this when you change power)
 
+
+    // ---------------- Shooter RPM control (target RPM, not power) ----------------
+    private static final double SHOOTER_TICKS_PER_REV = 28.0; // REV HD Hex / most FTC motors' internal encoder
+// If you have external encoder or different motor, change this.
+
+    // Base RPM controller (P + small I)
+    private static final double SHOOTER_RPM_KP = 0.0009;   // tune 0.0006..0.0014
+    private static final double SHOOTER_RPM_KI = 0.00012;  // tune 0..0.00025 (set 0 if you want P-only)
+
+    // "Match each other" coupling (helps equalize even if one motor is stronger)
+    private static final double SHOOTER_MATCH_KP = 0.00035; // tune 0.00015..0.00060
+
+    private static final double SHOOTER_MAX_POWER = 1.0;
+    private static final double SHOOTER_MIN_POWER_WHEN_ON = 0.10; // ensures they keep trying (change as needed)
+    private static final double SHOOTER_I_CLAMP = 0.25; // anti-windup
+
+    private double shooterTargetRPM = 0;  // set this to your desired RPM
+    private double shooterI0 = 0.0;
+    private double shooterI1 = 0.0;
+
     @Override
     public void runOpMode() {
         initLimelight();
@@ -288,11 +308,13 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         waitForStart();
 
         if (opModeIsActive()) {
-            shooterBasePower = 0.60;
+//            shooterBasePower = 0.60;
+            shooterTargetRPM = 3000;
 
             motor2b.setPower(1);
             while (opModeIsActive()) {
-                balanceShooterRPM(shooterBasePower);
+                setShooterRPM(shooterTargetRPM);
+//                balanceShooterRPM(shooterBasePower);
                 telemetry.clear();
 
                 lights();
@@ -358,6 +380,81 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
             }
         }
     }
+
+
+    private double ticksPerSecondToRPM(double ticksPerSec) {
+        // rpm = (ticks/sec) * (60 sec/min) / (ticks/rev)
+        return (Math.abs(ticksPerSec) * 60.0) / SHOOTER_TICKS_PER_REV;
+    }
+
+    /**
+     * Closed-loop RPM control for motor0b + motor1b.
+     * - Tries to reach targetRPM on BOTH motors.
+     * - Adds a coupling term to keep RPMs matched.
+     * - Enforces a minimum "trying" power while targetRPM > 0.
+     *
+     * Call this every loop while shooter is enabled.
+     */
+    private void setShooterRPM(double targetRPM) {
+        shooterTargetRPM = Math.max(0.0, targetRPM);
+
+        // If target is 0, stop and reset integrators
+        if (shooterTargetRPM <= 1.0) {
+            motor0b.setPower(0);
+            motor1b.setPower(0);
+            shooterI0 = 0;
+            shooterI1 = 0;
+            return;
+        }
+
+        // Measure current speeds
+        double rpm0 = ticksPerSecondToRPM(((DcMotorEx) motor0b).getVelocity());
+        double rpm1 = ticksPerSecondToRPM(((DcMotorEx) motor1b).getVelocity());
+
+        // Error to target
+        double e0 = shooterTargetRPM - rpm0;
+        double e1 = shooterTargetRPM - rpm1;
+
+        // Coupling error (positive means motor0 is faster than motor1)
+        double matchErr = rpm0 - rpm1;
+
+        // Integrate (simple I-term; clamp to avoid windup)
+        // Use a conservative dt (your loop is fast; clamp like you did for servo)
+        double dt = 0.02; // ~50Hz assumption; good enough for FTC TeleOp
+        shooterI0 = clamp(shooterI0 + e0 * dt, -SHOOTER_I_CLAMP, SHOOTER_I_CLAMP);
+        shooterI1 = clamp(shooterI1 + e1 * dt, -SHOOTER_I_CLAMP, SHOOTER_I_CLAMP);
+
+        // Base power command for each motor to hit target RPM
+        double p0 = SHOOTER_RPM_KP * e0 + SHOOTER_RPM_KI * shooterI0;
+        double p1 = SHOOTER_RPM_KP * e1 + SHOOTER_RPM_KI * shooterI1;
+
+        // Coupling: slow the faster one, speed up the slower one
+        double matchAdj = SHOOTER_MATCH_KP * matchErr;
+        p0 -= matchAdj;
+        p1 += matchAdj;
+
+        // Enforce minimum "trying" power so they keep pushing toward target RPM
+        // (This does NOT guarantee the RPM is achievable; it guarantees effort.)
+        p0 = Math.max(p0, SHOOTER_MIN_POWER_WHEN_ON);
+        p1 = Math.max(p1, SHOOTER_MIN_POWER_WHEN_ON);
+
+        // Clamp to legal range
+        p0 = clamp(p0, -SHOOTER_MAX_POWER, SHOOTER_MAX_POWER);
+        p1 = clamp(p1, -SHOOTER_MAX_POWER, SHOOTER_MAX_POWER);
+
+        motor0b.setPower(p0);
+        motor1b.setPower(p1);
+
+        telemetry.addData("ShooterRPM",
+                "tgt=%.0f rpm0=%.0f rpm1=%.0f e0=%.0f e1=%.0f p0=%.2f p1=%.2f",
+                shooterTargetRPM, rpm0, rpm1, e0, e1, p0, p1);
+        telemetry.addData("ShooterMatch", "err=%.0f adj=%.3f", matchErr, matchAdj);
+    }
+
+    private double clamp(double v, double lo, double hi) {
+        return Math.max(lo, Math.min(hi, v));
+    }
+
 
     /**
      * Balances motor0b and motor1b RPM while keeping the average near basePower.
@@ -1214,17 +1311,23 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         } else if (gamepad2.dpad_down) {
             servo2Pos -= SERVO2_RATE * dt;
         }
-        if (gamepad2.dpadRightWasPressed()) {
-            shooterBasePower += 0.1;
+        if (gamepad2.dpadRightWasPressed()) shooterTargetRPM += 150;
+        if (gamepad2.dpadLeftWasPressed())  shooterTargetRPM -= 150;
+        shooterTargetRPM = Math.max(0, shooterTargetRPM);
+
+//        if (gamepad2.dpadRightWasPressed()) {
+//            shooterBasePower += 0.1;
+
+
 //            motor0b.setPower(motor0b.getPower() + .1);
 //            motor1b.setPower(motor1b.getPower() + .1);
-        }
-        if (gamepad2.dpadLeftWasPressed()) {
-            shooterBasePower -= 0.1;
+//        }
+//        if (gamepad2.dpadLeftWasPressed()) {
+//            shooterBasePower -= 0.1;
 
 //            motor0b.setPower(motor0b.getPower() - .1);
 //            motor1b.setPower(motor1b.getPower() - .1);
-        }
+//        }
 
 
         servo2Pos = Math.max(SERVO2_MIN, Math.min(SERVO2_MAX, servo2Pos));
