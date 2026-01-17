@@ -190,7 +190,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     // ---------------- Shooter RPM balancing ----------------
     private static final double SHOOTER_BAL_KP = 0.00025; // tune: start 0.00015..0.00040
     private static final double SHOOTER_BAL_MAX_ADJ = 0.12; // max +/- added to base power
-    private static final double SHOOTER_MIN_ACTIVE_POWER = 0.08; // don't balance below this
+    private static final double SHOOTER_MIN_ACTIVE_POWER = 0.8; // don't balance below this
 
     private double shooterBasePower = 0.60; // "set power" you want (update this when you change power)
 
@@ -207,7 +207,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private static final double SHOOTER_MATCH_KP = 0.00035; // tune 0.00015..0.00060
 
     private static final double SHOOTER_MAX_POWER = 1.0;
-    private static final double SHOOTER_MIN_POWER_WHEN_ON = 0.10; // ensures they keep trying (change as needed)
+    private static final double SHOOTER_MIN_POWER_WHEN_ON = 0.60; // ensures they keep trying (change as needed)
     private static final double SHOOTER_I_CLAMP = 0.25; // anti-windup
 
     private double shooterTargetRPM = 0;  // set this to your desired RPM
