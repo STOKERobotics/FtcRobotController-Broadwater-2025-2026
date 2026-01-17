@@ -292,9 +292,9 @@ public class broadwater_robotics_25_26_auto_RED extends LinearOpMode {
         ElapsedTime timer = new ElapsedTime();
         timer.reset();
         while (opModeIsActive() && !align && timer.seconds() < 5.0){
-
            align = alignToTarget();
         }
+        telemetry.update();
         while (opModeIsActive() && !shoot){
             adjustShooterAndFire();
         }
