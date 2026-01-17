@@ -26,6 +26,7 @@ import com.qualcomm.robotcore.hardware.NormalizedColorSensor;
 import com.qualcomm.robotcore.hardware.NormalizedRGBA;
 import com.qualcomm.robotcore.hardware.SwitchableLight;
 import com.qualcomm.robotcore.hardware.AnalogInput;
+import com.qualcomm.robotcore.util.ElapsedTime;
 
 import android.graphics.Color;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
@@ -256,7 +257,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         mag1.setMode(DigitalChannel.Mode.INPUT);
         mag2.setMode(DigitalChannel.Mode.INPUT);
         mag3.setMode(DigitalChannel.Mode.INPUT);
-
+        redLED.setState(!isRedOn);
 
 
         waitForStart();
@@ -291,8 +292,10 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         telemetry.update();
 
 
+        ElapsedTime timer = new ElapsedTime();
+        timer.reset();
+        while (opModeIsActive() && !align && timer.seconds() < 5.0){
 
-        while (!align){
            align = alignToTarget();
         }
         while (opModeIsActive() && !shoot){
