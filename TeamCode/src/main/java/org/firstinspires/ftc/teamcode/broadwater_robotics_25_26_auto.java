@@ -266,7 +266,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
         motifListenEnabled = true;     // auto must enable it
         motifLatched = false;
-        driveForwardMeters(0.2, -0.6);
+        driveForwardMeters(0.1, -0.6);
         telemetryLimeLight();
         motifLatched = false;
         latchedMotif = "NONE";
