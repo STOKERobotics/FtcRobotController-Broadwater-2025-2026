@@ -1,39 +1,36 @@
 package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.hardware.bosch.BNO055IMU;
-import com.qualcomm.hardware.limelightvision.LLResult;
-import com.qualcomm.hardware.limelightvision.LLResultTypes;
+import com.qualcomm.hardware.bosch.BNO055IMU.Parameters;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
+import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
+
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+
 import com.qualcomm.robotcore.hardware.AnalogInput;
 import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.DigitalChannel;
-import com.qualcomm.robotcore.hardware.NormalizedColorSensor;
-import com.qualcomm.robotcore.hardware.NormalizedRGBA;
 import com.qualcomm.robotcore.hardware.Servo;
-import com.qualcomm.robotcore.hardware.SwitchableLight;
 
-import android.graphics.Color;
+import com.qualcomm.robotcore.hardware.NormalizedColorSensor;
+import com.qualcomm.robotcore.hardware.SwitchableLight;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
-import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 
-import java.util.List;
-
-@Autonomous(name = "Broadwater Robotics Auto (TeleOp-aligned)")
+@Autonomous(name = "Broadwater Auto: 1m + Turn35 + SpinUp")
 public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
-    // -------------------- Hardware --------------------
-    private DcMotor motor0;  // FR
-    private DcMotor motor1;  // BL
-    private DcMotor motor2;  // FL
-    private DcMotor motor3;  // BR
+    // ---------------- Hardware ----------------
+    private DcMotor motor0; // Drive FR
+    private DcMotor motor1; // Drive BL
+    private DcMotor motor2; // Drive FL
+    private DcMotor motor3; // Drive BR
+
     private DcMotor motor0b; // Shooter 1
     private DcMotor motor1b; // Shooter 2
     private DcMotor motor2b; // Intake
@@ -43,187 +40,80 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     private Servo servo2;    // Shooter Angle
 
     private BNO055IMU imu1;
+
+    private DigitalChannel redLED;
+    private DigitalChannel blueLED;
+
     private AnalogInput laser;
 
-    private DigitalChannel mag0; // intake mag0
-    private DigitalChannel mag1; // intake mag1
-    private DigitalChannel mag2; // shooter mag2
-    private DigitalChannel mag3; // shooter mag3
+    private DigitalChannel mag0; // Intake Magnet 0
+    private DigitalChannel mag1; // Intake Magnet 1
+    private DigitalChannel mag2; // Shooter Magnet 2
+    private DigitalChannel mag3; // Shooter Magnet 3
 
     private NormalizedColorSensor ballColor;
 
-    // -------------------- Limelight --------------------
+    // (Optional) Limelight (not used in this simple routine, but kept so your config still matches)
     private Limelight3A limelight;
 
-    // Align (same as TeleOp)
-    private static final double ALIGN_KP = 0.03;
-    private static final double ALIGN_TOLERANCE = 1.0;   // deg
-    private static final double ALIGN_MAX_POWER = 0.3;
+    // ---------------- Tunables ----------------
+    // Wheel + encoder conversion (UPDATE these for your robot!)
+    // goBILDA 96mm mecanum: diameter ≈ 0.096m, circumference ≈ 0.3016m
+    private static final double WHEEL_DIAMETER_M = 0.096;
+    private static final double WHEEL_CIRCUMFERENCE_M = Math.PI * WHEEL_DIAMETER_M;
 
-    // Shooter angle mapping
-    private static final double SHOOTER_MIN_DIST = 50.0;   // inches
-    private static final double SHOOTER_MAX_DIST = 120.0;  // inches
-    private static final double SERVO_MIN_ANGLE = 0.25;
-    private static final double SERVO_MAX_ANGLE = 0.85;
+    // Put YOUR real ticks per wheel revolution here:
+    // Examples many teams use: 537.7 (19.2:1), 383.6 (13.7:1), 312 (11:1)
+    private static final double TICKS_PER_WHEEL_REV = 537.7;
 
-    // -------------------- Kicker (MATCH TELEOP) --------------------
-    // NOTE: If your kicker is reversed in Auto, swap these two.
-    private static final double KICK_EXTEND_POS  = 0.0;
+    private static final double DRIVE_MIN_POWER = 0.12;
+
+    // Shooter / intake powers
+    private static final double SHOOTER_POWER = 0.6;
+    private static final double INTAKE_POWER  = 1.0;
+
+    // Kicker (not used in this routine, but left for consistency)
     private static final double KICK_RETRACT_POS = 1.0;
-    private static final long   KICK_DURATION_MS = 1000;
-
-    // Servo2 manual adjust (MANUAL fallback)
-    private double servo2Pos = 0.5;
-    private static final double SERVO2_MIN = 0.0;
-    private static final double SERVO2_MAX = 1.0;
-    private static final double SERVO2_RATE = 0.6;
-    private double lastServo2Time = 0.0;
-
-    // -------------------- Motif latch --------------------
-    private boolean motifLatched = false;
-    private int latchedTagId = -1;
-    private String latchedMotif = "NONE";
-    private double lastTagDistanceIn = -1;
-
-    // -------------------- Tray / Intake (PORTED FROM TELEOP) --------------------
-    private enum INTAKEState { INIT_TO_SLOT0, WAIT_COLOR_0, MOVE_TO_SLOT1, WAIT_COLOR_1, MOVE_TO_SLOT2, WAIT_COLOR_2, DONE }
-    private INTAKEState intakeState = INTAKEState.INIT_TO_SLOT0;
-
-    private int currentSlot = 0;
-    private boolean colorLatched = false; // edge detect so one ball = one store
-
-    // Fired tracking
-    private final boolean[] slotFired = new boolean[3];
-    private final String[] slots = new String[3]; // "g" or "p"
-    private String ballColorValue;
-
-    // Tray motion tuning (match TeleOp)
-    private boolean shootingBusy = false;
-
-    private static final double MGR_FAST_POWER   = 0.25;
-    private static final double MGR_CRAWL_POWER  = 0.10;
-    private static final long   MGR_BRAKE_MS     = 0;
-    private static final double MGR_BRAKE_POWER  = -0.30;
-    private static final double MGR_BACKUP_POWER   = -0.0;
-    private static final long   MGR_BACKUP_1DEG_MS = 0;
-
-    private static final long MGR_MOVE_TIMEOUT_MS = 10000;
-
-    // Intake->Shoot mapping (TeleOp uses an offset)
-    private static final int INTAKE_TO_SHOOT_OFFSET = 1;
-
-    // Which direction is "next" while intaking
-    private static final int INTAKE_SLOT_STEP = +1;
-
-    // -------------------- SEQUENCE ENGINE --------------------
-    private enum ControlMode { MANUAL, SEQUENCE }
-    private ControlMode controlMode = ControlMode.SEQUENCE;
-
-    private enum StepType {
-        DRIVE_TO,
-        INTAKE_UNTIL_FULL,
-        ALIGN_TO_TAG,
-        SHOOT_MOTIF,
-        WAIT,
-        DONE
-    }
-
-    private static class Command {
-        StepType type;
-
-        // DRIVE_TO
-        double x, y, headingDeg;
-        long timeoutMs;
-
-        // WAIT
-        long waitMs;
-
-        Command(StepType t) { type = t; }
-
-        static Command driveTo(double x, double y, double headingDeg, long timeoutMs) {
-            Command c = new Command(StepType.DRIVE_TO);
-            c.x = x; c.y = y; c.headingDeg = headingDeg;
-            c.timeoutMs = timeoutMs;
-            return c;
-        }
-
-        static Command intakeUntilFull(long timeoutMs) {
-            Command c = new Command(StepType.INTAKE_UNTIL_FULL);
-            c.timeoutMs = timeoutMs;
-            return c;
-        }
-
-        static Command alignToTag(long timeoutMs) {
-            Command c = new Command(StepType.ALIGN_TO_TAG);
-            c.timeoutMs = timeoutMs;
-            return c;
-        }
-
-        static Command shootMotif(long timeoutMs) {
-            Command c = new Command(StepType.SHOOT_MOTIF);
-            c.timeoutMs = timeoutMs;
-            return c;
-        }
-
-        static Command waitMs(long waitMs) {
-            Command c = new Command(StepType.WAIT);
-            c.waitMs = waitMs;
-            return c;
-        }
-
-        static Command done() { return new Command(StepType.DONE); }
-    }
-
-    private static class PoseEstimate {
-        final double x, y, headingDeg;
-        PoseEstimate(double x, double y, double headingDeg) {
-            this.x = x; this.y = y; this.headingDeg = headingDeg;
-        }
-    }
-
-    private int seqIndex = 0;
-    private long stepStartMs = 0;
-
-    // -------------------- Botpose navigation tuning --------------------
-    private static final double KP_XY = 1.2;     // meters -> stick
-    private static final double KP_H  = 0.02;    // deg -> stick
-
-    private static final double MAX_DRIVE_POWER  = 0.55;
-    private static final double MAX_STRAFE_POWER = 0.55;
-    private static final double MAX_TURN_POWER   = 0.35;
-
-    private static final double POS_TOL_M    = 0.05; // 5cm
-    private static final double ANG_TOL_DEG  = 3.0;
-
-    // Your alliance tag selection (used only in alignToTarget())
-    private static final int RED_TAG_ID  = 21;
-    private static final int BLUE_TAG_ID = 22;
-
-    private enum Alliance { RED, BLUE }
-    private Alliance alliance = Alliance.RED;
-
-    // ===== EDIT YOUR SEQUENCE HERE =====
-    private final Command[] sequence = new Command[] {
-            // Command.intakeUntilFull(8000),
-            Command.alignToTag(3000),
-            Command.shootMotif(0),
-            Command.done()
-    };
-    // ===================================
 
     @Override
     public void runOpMode() {
-        initLimelight();
+        initHardware();
+        initLimelight(); // optional — uncomment if you want Limelight running in auto
 
-        telemetry.addLine("Broadwater Auto ready (TeleOp-aligned).");
-        telemetry.addLine("Runs SEQUENCE. Press BACK to cancel to MANUAL.");
+        telemetry.addLine("Auto ready.");
+        telemetry.addLine("Will: spin shooters+intake, drive 1m, turn right 35deg");
         telemetry.update();
 
-        // Hardware map
-        motor0  = hardwareMap.get(DcMotor.class, "motor0");
-        motor1  = hardwareMap.get(DcMotor.class, "motor1");
-        motor2  = hardwareMap.get(DcMotor.class, "motor2");
-        motor3  = hardwareMap.get(DcMotor.class, "motor3");
+        waitForStart();
+        if (!opModeIsActive()) return;
+
+        // ---- Spin up shooter + intake ----
+        motor0b.setPower(SHOOTER_POWER);
+        motor1b.setPower(SHOOTER_POWER);
+        motor2b.setPower(INTAKE_POWER);
+
+        // ---- Drive forward 1 meter ----
+        driveForwardMeters(-1.0, 1);
+
+        // ---- Turn right 35 degrees ----
+        turnRightDegrees(-135.0, 0.25);
+
+        // (Optional) keep running shooter/intake, or stop them:
+        // motor0b.setPower(0);
+        // motor1b.setPower(0);
+        // motor2b.setPower(0);
+
+
+        stopDrive();
+    }
+
+    // ---------------- Init ----------------
+    private void initHardware() {
+        motor0 = hardwareMap.get(DcMotor.class, "motor0");
+        motor1 = hardwareMap.get(DcMotor.class, "motor1");
+        motor2 = hardwareMap.get(DcMotor.class, "motor2");
+        motor3 = hardwareMap.get(DcMotor.class, "motor3");
+
         motor0b = hardwareMap.get(DcMotor.class, "motor0b");
         motor1b = hardwareMap.get(DcMotor.class, "motor1b");
         motor2b = hardwareMap.get(DcMotor.class, "motor2b");
@@ -233,59 +123,52 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         servo2 = hardwareMap.get(Servo.class, "servo2");
 
         laser = hardwareMap.get(AnalogInput.class, "laser");
-        imu1  = hardwareMap.get(BNO055IMU.class, "imu 1");
-
-        ballColor = hardwareMap.get(NormalizedColorSensor.class, "ballColor");
 
         mag0 = hardwareMap.get(DigitalChannel.class, "mag0");
         mag1 = hardwareMap.get(DigitalChannel.class, "mag1");
         mag2 = hardwareMap.get(DigitalChannel.class, "mag2");
         mag3 = hardwareMap.get(DigitalChannel.class, "mag3");
 
-        // -------------------- Motor directions (match TeleOp) --------------------
+        redLED  = hardwareMap.get(DigitalChannel.class, "redLED");
+        blueLED = hardwareMap.get(DigitalChannel.class, "blueLED");
+        redLED.setMode(DigitalChannel.Mode.OUTPUT);
+        blueLED.setMode(DigitalChannel.Mode.OUTPUT);
+
+        imu1 = hardwareMap.get(BNO055IMU.class, "imu 1");
+
+        ballColor = hardwareMap.get(NormalizedColorSensor.class, "ballColor");
+
+        // Drive directions (kept from your TeleOp)
         motor0.setDirection(DcMotor.Direction.FORWARD);
         motor1.setDirection(DcMotor.Direction.REVERSE);
         motor2.setDirection(DcMotor.Direction.FORWARD);
         motor3.setDirection(DcMotor.Direction.FORWARD);
 
-        motor0.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        motor1.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        motor2.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        motor3.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-
-        motor0.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        motor1.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        motor2.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        motor3.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-
+        // Shooter/intake directions (kept from your TeleOp)
         motor0b.setDirection(DcMotor.Direction.REVERSE);
         motor1b.setDirection(DcMotor.Direction.FORWARD);
         motor2b.setDirection(DcMotorSimple.Direction.FORWARD);
 
-        motor0b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        motor1b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        motor2b.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-
-        motor0b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        motor1b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        motor2b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-
-        // -------------------- Servo init (match TeleOp) --------------------
-        servo0.setPosition(KICK_RETRACT_POS);
-        servo2.setPosition(servo2Pos);
-        lastServo2Time = getRuntime();
-
-        // Tray direction (match TeleOp)
+        // Tray direction
         servo1.setDirection(DcMotorSimple.Direction.REVERSE);
 
-        // -------------------- IMU init (for MANUAL field-centric fallback) --------------------
-        BNO055IMU.Parameters imuParameters = new BNO055IMU.Parameters();
+        // Kicker safe
+        servo0.setPosition(KICK_RETRACT_POS);
+
+        // IMU init
+        RevHubOrientationOnRobot orientation =
+                new RevHubOrientationOnRobot(
+                        RevHubOrientationOnRobot.LogoFacingDirection.LEFT,
+                        RevHubOrientationOnRobot.UsbFacingDirection.UP
+                );
+
+        Parameters imuParameters = new Parameters();
         imuParameters.angleUnit = BNO055IMU.AngleUnit.DEGREES;
         imuParameters.accelUnit = BNO055IMU.AccelUnit.METERS_PERSEC_PERSEC;
         imuParameters.loggingEnabled = false;
         imu1.initialize(imuParameters);
 
-        // Enable sensor light if present
+        // Color sensor light
         if (ballColor instanceof SwitchableLight) {
             ((SwitchableLight) ballColor).enableLight(true);
         }
@@ -296,267 +179,179 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         mag2.setMode(DigitalChannel.Mode.INPUT);
         mag3.setMode(DigitalChannel.Mode.INPUT);
 
-        // Sequence setup
-        controlMode = ControlMode.SEQUENCE;
-        seqIndex = 0;
-        stepStartMs = System.currentTimeMillis();
+        // Make sure drive motors are in a known mode
+        motor0.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor1.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor2.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor3.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
-        waitForStart();
-
-        while (opModeIsActive()) {
-
-            if (gamepad1.back && controlMode == ControlMode.SEQUENCE) cancelSequence();
-
-            // Always update telemetry + latching
-            getData();
-            telemetryLimeLight();
-
-            if (controlMode == ControlMode.SEQUENCE) {
-                runSequence();
-            } else {
-                // MANUAL fallback uses your TeleOp-style IMU field-centric
-                sticksManualTeleopStyle();
-                buttonsManualServo2();
-
-                if (intakeState != INTAKEState.DONE) updateBallColor();
-                merryGoRoundIntake();
-                if (intakeState != INTAKEState.DONE) telemetryBallColor();
-            }
-
-            // Laser telemetry
-            double v = laser.getVoltage();
-            double mm = (v / 3.3) * 1000.0;
-            double inches = mm / 25.4;
-            telemetry.addData("Laser Dist", "%.0f mm  (%.1f in)", mm, inches);
-
-            telemetry.addData("MODE", controlMode);
-            telemetry.update();
-        }
+        // For better stopping
+        motor0.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        motor1.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        motor2.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        motor3.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
     }
 
-    // -------------------- Limelight --------------------
+    // Optional
     private void initLimelight() {
         limelight = hardwareMap.get(Limelight3A.class, "limelight");
-        telemetry.setMsTransmissionInterval(11);
+        telemetry.setMsTransmissionInterval(50);
         limelight.pipelineSwitch(0);
         limelight.start();
     }
 
-    private void telemetryLimeLight() {
-        LLResult result = limelight.getLatestResult();
+    // ---------------- Movement: Forward (encoders) ----------------
+    private void driveForwardMeters(double meters, double power) {
+        int ticks = (int) Math.round((meters / WHEEL_CIRCUMFERENCE_M) * TICKS_PER_WHEEL_REV);
 
-        if (result == null) {
-            telemetry.addLine("LLResult = null");
-            return;
+        int startFR = motor0.getCurrentPosition();
+        int startBL = motor1.getCurrentPosition();
+        int startFL = motor2.getCurrentPosition();
+        int startBR = motor3.getCurrentPosition();
+
+        int targetFR = startFR + ticks;
+        int targetBL = startBL + ticks;
+        int targetFL = startFL + ticks;
+        int targetBR = startBR + ticks;
+
+        setDriveTarget(targetFR, targetBL, targetFL, targetBR);
+
+        double p = Math.max(DRIVE_MIN_POWER, Math.abs(power));
+        setDriveRunToPositionPower(p, p, p, p);
+
+        long start = System.currentTimeMillis();
+        long timeoutMs = 6000; // increase if needed
+
+        while (opModeIsActive()
+                && (System.currentTimeMillis() - start) < timeoutMs
+                && driveBusy()) {
+
+            telemetry.addData("Forward", "%.2fm ticks=%d", meters, ticks);
+            telemetry.addData("FR/FL", "%d / %d", motor0.getCurrentPosition(), motor2.getCurrentPosition());
+            telemetry.addData("IMU yaw", "%.1f", getYawDeg());
+            telemetry.update();
+            idle();
         }
 
-        telemetryTagMotifs(result);
-        updateLatchedMotif(result);
-        telemetry.addData("Stored Tag Colors", "%s (Tag %d)", latchedMotif, latchedTagId);
-
-        Pose3D targetCam = getBestTagPoseCameraSpace(result);
-        if (targetCam != null) {
-            double xIn = targetCam.getPosition().x * 39.37;
-            double yIn = targetCam.getPosition().y * 39.37;
-            double zIn = targetCam.getPosition().z * 39.37;
-            lastTagDistanceIn = Math.sqrt(xIn * xIn + yIn * yIn + zIn * zIn);
-            telemetry.addData("Distance from tag (in)", "%.1f", lastTagDistanceIn);
-        } else {
-            lastTagDistanceIn = -1;
-            telemetry.addLine("TagCam: none");
-        }
-
-        Pose3D botpose = result.getBotpose();
-        if (botpose == null) {
-            telemetry.addLine("botpose = null");
-            return;
-        }
-
-        telemetry.addData("Botpose x,y,z (m)", "(%.3f, %.3f, %.3f)",
-                botpose.getPosition().x, botpose.getPosition().y, botpose.getPosition().z);
-    }
-
-    // -------------------- Sequence Engine --------------------
-    private void cancelSequence() {
-        controlMode = ControlMode.MANUAL;
         stopDrive();
+        setDriveRunUsingEncoder();
     }
 
-    private void runSequence() {
-        if (seqIndex >= sequence.length) {
-            controlMode = ControlMode.MANUAL;
-            stopDrive();
-            return;
+    // ---------------- Movement: Turn right (IMU) ----------------
+    private void turnRightDegrees(double degrees, double maxPower) {
+        // Read start yaw
+        double startYaw = getYawDeg();
+
+        // Most robots: right turn = yaw decreases. If yours is opposite, flip sign below.
+        double targetYaw = angleWrapDeg(startYaw - degrees);
+
+        // Tunables
+        final double TOL_DEG = 2.0;     // stop window
+        final double MIN_PWR = 0.10;    // overcome friction
+        final double KP      = 0.012;   // turn strength (start here)
+        final long   TIMEOUT = 4000;
+
+        double pMax = Math.max(MIN_PWR, Math.abs(maxPower));
+
+        long start = System.currentTimeMillis();
+        while (opModeIsActive() && (System.currentTimeMillis() - start) < TIMEOUT) {
+            double yaw = getYawDeg();
+            double err = angleWrapDeg(targetYaw - yaw);  // wrap-safe error in [-180,180]
+
+            telemetry.addData("Turn", "start=%.1f target=%.1f yaw=%.1f err=%.1f",
+                    startYaw, targetYaw, yaw, err);
+            telemetry.update();
+
+            if (Math.abs(err) <= TOL_DEG) break;
+
+            // Proportional control with min power + clamp
+            double cmd = err * KP;
+
+            // clamp to max
+            cmd = clip(cmd, -pMax, pMax);
+
+            // enforce min power if we're not close yet
+            if (Math.abs(cmd) < MIN_PWR) cmd = MIN_PWR * Math.signum(cmd);
+
+            // slow down when close (prevents overshoot)
+            if (Math.abs(err) < 10.0) {
+                cmd = clip(cmd, -0.18, 0.18);
+            }
+
+            driveRobotCentric(0, 0, cmd);
+            idle();
         }
 
-        Command cmd = sequence[seqIndex];
-        long elapsed = System.currentTimeMillis() - stepStartMs;
+        stopDrive();
 
-        telemetry.addData("SEQ", "Step %d/%d  %s  t=%dms",
-                (seqIndex + 1), sequence.length, cmd.type, elapsed);
-
-        boolean stepDone = false;
-
-        switch (cmd.type) {
-            case DRIVE_TO: {
-                boolean arrived = driveToBotpose(cmd.x, cmd.y, cmd.headingDeg);
-                if (arrived) stepDone = true;
-
-                if (elapsed > cmd.timeoutMs) {
-                    telemetry.addLine("DRIVE_TO timeout -> cancel");
-                    cancelSequence();
-                    return;
-                }
-                break;
-            }
-
-            case INTAKE_UNTIL_FULL: {
-                updateBallColor();
-                merryGoRoundIntake();
-                telemetryBallColor();
-
-                if (allSlotsLoaded()) stepDone = true;
-
-                if (elapsed > cmd.timeoutMs) {
-                    telemetry.addLine("INTAKE timeout -> continuing");
-                    stepDone = true;
-                }
-                break;
-            }
-
-            case ALIGN_TO_TAG: {
-                boolean aligned = alignToTarget();
-                if (aligned) stepDone = true;
-
-                if (elapsed > cmd.timeoutMs) {
-                    telemetry.addLine("ALIGN timeout -> cancel");
-                    cancelSequence();
-                    return;
-                }
-                break;
-            }
-
-            case SHOOT_MOTIF: {
-                adjustShooterAndFire();
-                stepDone = true;
-                break;
-            }
-
-            case WAIT: {
-                stopDrive();
-                if (elapsed >= cmd.waitMs) stepDone = true;
-                break;
-            }
-
-            case DONE: {
-                stopDrive();
-                controlMode = ControlMode.MANUAL;
-                return;
-            }
-        }
-
-        if (stepDone) {
-            stopDrive();
-            sleep(120);
-            seqIndex++;
-            stepStartMs = System.currentTimeMillis();
-        }
+        // Small settle
+        sleep(120);
     }
 
-    // -------------------- BOTPOSE NAV --------------------
-    private boolean driveToBotpose(double targetX, double targetY, double targetHeadingDeg) {
 
-        PoseEstimate cur = getPoseEstimate();
-        if (cur == null) {
-            stopDrive();
-            telemetry.addLine("botpose null -> can't navigate");
-            return false;
-        }
-
-        double dx = targetX - cur.x;
-        double dy = targetY - cur.y;
-        double dh = angleWrapDeg(targetHeadingDeg - cur.headingDeg);
-
-        double dist = Math.hypot(dx, dy);
-
-        boolean posOk = dist <= POS_TOL_M;
-        boolean angOk = Math.abs(dh) <= ANG_TOL_DEG;
-        if (posOk && angOk) {
-            stopDrive();
-            return true;
-        }
-
-        double hRad = Math.toRadians(cur.headingDeg);
-        double robotForward =  dx * Math.cos(hRad) + dy * Math.sin(hRad);
-        double robotLeft    = -dx * Math.sin(hRad) + dy * Math.cos(hRad);
-
-        double posScale = clip(dist / 0.60, 0.18, 1.0);
-        double angScale = clip(Math.abs(dh) / 25.0, 0.18, 1.0);
-
-        double LSY = clip(robotForward * KP_XY * posScale, -MAX_DRIVE_POWER,  MAX_DRIVE_POWER);
-        double LSX = clip(robotLeft    * KP_XY * posScale, -MAX_STRAFE_POWER, MAX_STRAFE_POWER);
-        double RSX = clip(dh          * KP_H  * angScale, -MAX_TURN_POWER,   MAX_TURN_POWER);
-
-        if (dist < 0.15) {
-            LSY = 0;
-            LSX = 0;
-        }
-
-        driveByIntent(LSY, LSX, RSX);
-
-        telemetry.addData("BOTPOSE", "x=%.3f y=%.3f h=%.1f", cur.x, cur.y, cur.headingDeg);
-        telemetry.addData("TARGET",  "x=%.3f y=%.3f h=%.1f", targetX, targetY, targetHeadingDeg);
-        telemetry.addData("ERR",     "dx=%.3f dy=%.3f dist=%.3f dh=%.1f", dx, dy, dist, dh);
-        telemetry.addData("ROBOT_ERR", "fwd=%.3f left=%.3f", robotForward, robotLeft);
-        telemetry.addData("FAKE STICKS", "LSY=%.2f LSX=%.2f RSX=%.2f", LSY, LSX, RSX);
-
-        return false;
-    }
-
-    private PoseEstimate getPoseEstimate() {
-        LLResult result = limelight.getLatestResult();
-        if (result == null) return null;
-
-        Pose3D botpose = result.getBotpose();
-        if (botpose == null) return null;
-
-        double x = botpose.getPosition().x; // meters
-        double y = botpose.getPosition().y; // meters
-        double headingDeg = botpose.getOrientation().getYaw(AngleUnit.DEGREES);
-
-        return new PoseEstimate(x, y, headingDeg);
-    }
-
-    // Same mixer style as your TeleOp convention (+ normalization)
-    private void driveByIntent(double lsy, double lsx, double rsx) {
-        double drive  = lsy;
-        double strafe = lsx;
-        double turn   = rsx;
-
-        // Matches your TeleOp convention
-        double correctedDrive  = drive;
-        double correctedStrafe = -strafe;
-
-        double fr = (correctedDrive - correctedStrafe) - turn; // motor0
-        double fl = (correctedDrive + correctedStrafe) + turn; // motor2
-        double br = (correctedDrive - correctedStrafe) + turn; // motor3
-        double bl = (correctedDrive + correctedStrafe) - turn; // motor1
+    // ---------------- Drive helpers ----------------
+    private void driveRobotCentric(double y, double x, double rx) {
+        double fl = y + x + rx; // motor2 (FL)
+        double fr = y - x - rx; // motor0 (FR)
+        double bl = y - x + rx; // motor1 (BL)
+        double br = y + x - rx; // motor3 (BR)
 
         double max = Math.max(1.0,
-                Math.max(Math.abs(fr),
-                        Math.max(Math.abs(fl),
-                                Math.max(Math.abs(br), Math.abs(bl)))));
+                Math.max(Math.abs(fl),
+                        Math.max(Math.abs(fr),
+                                Math.max(Math.abs(bl), Math.abs(br)))));
 
-        fr /= max; fl /= max; br /= max; bl /= max;
-
-        motor0.setPower(fr);
-        motor2.setPower(fl);
-        motor3.setPower(br);
-        motor1.setPower(bl);
+        motor2.setPower(fl / max);
+        motor0.setPower(fr / max);
+        motor1.setPower(bl / max);
+        motor3.setPower(br / max);
     }
 
-    private static double clip(double v, double lo, double hi) {
-        return Math.max(lo, Math.min(hi, v));
+    private void stopDrive() {
+        motor0.setPower(0);
+        motor1.setPower(0);
+        motor2.setPower(0);
+        motor3.setPower(0);
+    }
+
+    private void setDriveTarget(int fr, int bl, int fl, int br) {
+        motor0.setTargetPosition(fr);
+        motor1.setTargetPosition(bl);
+        motor2.setTargetPosition(fl);
+        motor3.setTargetPosition(br);
+
+        motor0.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        motor1.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        motor2.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        motor3.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+    }
+
+    private void setDriveRunToPositionPower(double fr, double bl, double fl, double br) {
+        motor0.setPower(fr);
+        motor1.setPower(bl);
+        motor2.setPower(fl);
+        motor3.setPower(br);
+    }
+
+    private boolean driveBusy() {
+        return motor0.isBusy() || motor1.isBusy() || motor2.isBusy() || motor3.isBusy();
+    }
+
+    private void setDriveRunUsingEncoder() {
+        motor0.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor1.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor2.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor3.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+    }
+
+    // ---------------- IMU helpers ----------------
+    private double getYawDeg() {
+        // ZYX: firstAngle = Z (yaw)
+        return imu1.getAngularOrientation(
+                AxesReference.INTRINSIC,
+                AxesOrder.ZYX,
+                AngleUnit.DEGREES
+        ).firstAngle;
     }
 
     private static double angleWrapDeg(double deg) {
@@ -565,574 +360,8 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         return deg;
     }
 
-    // -------------------- Align --------------------
-    private boolean alignToTarget() {
-        LLResult result = limelight.getLatestResult();
-        if (result == null || !result.isValid()) {
-            telemetry.addData("Alignment", "No valid LL result");
-            stopDrive();
-            return false;
-        }
-
-        int wantedId = getAllianceTagId();
-
-        LLResultTypes.FiducialResult best = getBestFiducialById(result, wantedId);
-        if (best == null) {
-            telemetry.addData("Alignment", "No %s tag detected (id=%d)",
-                    (alliance == Alliance.RED ? "RED" : "BLUE"), wantedId);
-            stopDrive();
-            return false;
-        }
-
-        Pose3D camPose = best.getTargetPoseCameraSpace();
-        if (camPose == null) {
-            telemetry.addLine("Alignment: tag pose missing");
-            stopDrive();
-            return false;
-        }
-
-        double x = camPose.getPosition().x;
-        double z = camPose.getPosition().z;
-        double tx = Math.toDegrees(Math.atan2(x, z));
-
-        if (Math.abs(tx) <= ALIGN_TOLERANCE) {
-            stopDrive();
-            telemetry.addData("Alignment", "Aligned to %s!",
-                    (alliance == Alliance.RED ? "RED" : "BLUE"));
-            latchMotifAndDistanceFromFiducial(best);
-            return true;
-        }
-
-        double turnPower = Math.max(-ALIGN_MAX_POWER, Math.min(ALIGN_MAX_POWER, tx * ALIGN_KP));
-        driveByIntent(0, 0, turnPower);
-
-        telemetry.addData("Aligning", "%s id=%d tx=%.2f pwr=%.2f",
-                (alliance == Alliance.RED ? "RED" : "BLUE"),
-                best.getFiducialId(), tx, turnPower);
-
-        return false;
+    private static double clip(double v, double lo, double hi) {
+        return Math.max(lo, Math.min(hi, v));
     }
 
-    private int getAllianceTagId() {
-        return (alliance == Alliance.RED) ? RED_TAG_ID : BLUE_TAG_ID;
-    }
-
-    private LLResultTypes.FiducialResult getBestFiducialById(LLResult result, int wantedId) {
-        List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
-        if (tags == null || tags.isEmpty()) return null;
-
-        LLResultTypes.FiducialResult best = null;
-        for (LLResultTypes.FiducialResult t : tags) {
-            if (t.getFiducialId() != wantedId) continue;
-            if (best == null || t.getTargetArea() > best.getTargetArea()) best = t;
-        }
-        return best;
-    }
-
-    private void latchMotifAndDistanceFromFiducial(LLResultTypes.FiducialResult tag) {
-        if (tag == null) return;
-
-        int id = tag.getFiducialId();
-        String motif = decodeMotifFromTagId(id);
-
-        if (!"UNKNOWN".equals(motif)) {
-            motifLatched = true;
-            latchedTagId = id;
-            latchedMotif = motif;
-        }
-
-        Pose3D camPose = tag.getTargetPoseCameraSpace();
-        if (camPose != null) {
-            double xIn = camPose.getPosition().x * 39.37;
-            double yIn = camPose.getPosition().y * 39.37;
-            double zIn = camPose.getPosition().z * 39.37;
-            lastTagDistanceIn = Math.sqrt(xIn*xIn + yIn*yIn + zIn*zIn);
-        } else {
-            lastTagDistanceIn = -1;
-        }
-    }
-
-    // -------------------- Shooter + motif firing (FIXED TO MATCH TELEOP) --------------------
-    private void adjustShooterAndFire() {
-        if (!motifLatched || latchedMotif == null || latchedMotif.length() != 3 || "UNKNOWN".equals(latchedMotif)) {
-            telemetry.addLine("Shooter: No valid motif latched");
-            return;
-        }
-        if (!allSlotsLoaded()) {
-            telemetry.addLine("Shooter: Slots not all loaded yet");
-            telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
-            return;
-        }
-        if (lastTagDistanceIn <= 0) {
-            telemetry.addLine("Shooter: No tag distance");
-            return;
-        }
-
-        double distanceInches = lastTagDistanceIn;
-        double normalized = Math.max(0, Math.min(1,
-                (distanceInches - SHOOTER_MIN_DIST) / (SHOOTER_MAX_DIST - SHOOTER_MIN_DIST)));
-
-        double servoAngle = SERVO_MAX_ANGLE - (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) * normalized;
-        servo2.setPosition(servoAngle);
-
-        telemetry.addData("Motif", latchedMotif);
-        telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
-        telemetry.addData("Dist(in)", "%.1f", distanceInches);
-        telemetry.addData("Shooter Angle", "%.2f", servoAngle);
-        telemetry.update();
-
-        for (int i = 0; i < 3; i++) slotFired[i] = false;
-
-        char[] order = latchedMotif.toCharArray();
-
-        for (int shotIndex = 0; shotIndex < 3 && opModeIsActive(); shotIndex++) {
-            char wanted = order[shotIndex];
-
-            int intakeSlotToShoot = findSlotForColor(wanted);
-            if (intakeSlotToShoot < 0) {
-                telemetry.addData("Shooter", "Missing color '%c' in slots (or already used)", wanted);
-                telemetry.update();
-                return;
-            }
-
-            telemetry.addData("Shooting", "shot %d wants %c -> intakeSlot %d", shotIndex, wanted, intakeSlotToShoot);
-            telemetry.update();
-
-            // IMPORTANT: convert intake slot to the shooter-frame slot (ported from TeleOp)
-            int shootFrameSlot = intakeSlotToShootSlot(intakeSlotToShoot);
-
-            rotateToShootSlotBlocking(shootFrameSlot);
-            kickOnce();
-            slotFired[intakeSlotToShoot] = true;
-
-            sleep(120);
-        }
-
-        telemetry.addLine("Shoot sequence done!");
-    }
-
-    private void kickOnce() {
-        ensureKickerRetracted();
-        servo0.setPosition(KICK_EXTEND_POS);
-        sleep(KICK_DURATION_MS);
-        servo0.setPosition(KICK_RETRACT_POS);
-    }
-
-    private void ensureKickerRetracted() {
-        servo0.setPosition(KICK_RETRACT_POS);
-    }
-
-    private boolean allSlotsLoaded() {
-        return slots[0] != null && slots[1] != null && slots[2] != null;
-    }
-
-    private int findSlotForColor(char wanted) {
-        String w = String.valueOf(wanted);
-        for (int i = 0; i < 3; i++) {
-            if (!slotFired[i] && w.equals(slots[i])) return i;
-        }
-        return -1;
-    }
-
-    private int intakeSlotToShootSlot(int intakeSlot) {
-        return (intakeSlot + INTAKE_TO_SHOOT_OFFSET + 3) % 3;
-    }
-
-    // -------------------- Tray: slot detectors (MATCH TELEOP) --------------------
-    // Intake slot detectors (mag0/mag1)
-    private boolean atSlot0() { return !mag0.getState() && !mag1.getState(); }
-    private boolean atSlot1() { return !mag0.getState() &&  mag1.getState(); }
-    private boolean atSlot2() { return  mag0.getState() && !mag1.getState(); }
-
-    // Shooter slot detectors (mag2/mag3)  <-- FIXED to match your TeleOp mapping
-    private boolean atShootSlot0() { return !mag2.getState() &&  mag3.getState(); }
-    private boolean atShootSlot1() { return !mag2.getState() && !mag3.getState(); }
-    private boolean atShootSlot2() { return  mag2.getState() && !mag3.getState(); }
-
-    private boolean atShootSlot(int slot) {
-        switch (slot) {
-            case 0: return atShootSlot0();
-            case 1: return atShootSlot1();
-            case 2: return atShootSlot2();
-            default: return false;
-        }
-    }
-
-    private boolean atIntakeSlot(int slot) {
-        switch (slot) {
-            case 0: return atSlot0();
-            case 1: return atSlot1();
-            case 2: return atSlot2();
-            default: return false;
-        }
-    }
-
-    // -------------------- Tray: improved rotate blocking (PORTED FROM TELEOP) --------------------
-    private void rotateToShootSlotBlocking(int targetSlot) {
-        shootingBusy = true;
-        try {
-            ensureKickerRetracted();
-
-            // If already sitting in the target window, force leave first
-            if (atShootSlot(targetSlot)) {
-                long leaveStart = System.currentTimeMillis();
-                servo1.setPower(MGR_CRAWL_POWER);
-                while (opModeIsActive()
-                        && atShootSlot(targetSlot)
-                        && (System.currentTimeMillis() - leaveStart) < 400) {
-                    idle();
-                }
-                servo1.setPower(0);
-            }
-
-            long start = System.currentTimeMillis();
-            servo1.setPower(MGR_FAST_POWER);
-
-            while (opModeIsActive()
-                    && !atShootSlot(targetSlot)
-                    && (System.currentTimeMillis() - start) < MGR_MOVE_TIMEOUT_MS) {
-                idle();
-            }
-            servo1.setPower(0);
-
-            if (!atShootSlot(targetSlot)) return; // timeout safety
-
-            // Brake tap
-            servo1.setPower(MGR_BRAKE_POWER);
-            sleep(MGR_BRAKE_MS);
-            servo1.setPower(0);
-
-            // Optional small reverse nudge
-            rotateTrayBackOneDegree();
-
-        } finally {
-            servo1.setPower(0);
-            shootingBusy = false;
-        }
-    }
-
-    private void rotateTrayBackOneDegree() {
-        servo1.setPower(MGR_BACKUP_POWER);
-        sleep(MGR_BACKUP_1DEG_MS);
-        servo1.setPower(0);
-    }
-
-    private void rotateToIntakeSlotBlocking(int targetSlot) {
-        ensureKickerRetracted();
-
-        if (atIntakeSlot(targetSlot)) {
-            long leaveStart = System.currentTimeMillis();
-            servo1.setPower(MGR_CRAWL_POWER);
-            while (opModeIsActive()
-                    && atIntakeSlot(targetSlot)
-                    && (System.currentTimeMillis() - leaveStart) < 400) {
-                idle();
-            }
-            servo1.setPower(0);
-        }
-
-        long start = System.currentTimeMillis();
-        servo1.setPower(MGR_FAST_POWER);
-
-        while (opModeIsActive()
-                && !atIntakeSlot(targetSlot)
-                && (System.currentTimeMillis() - start) < MGR_MOVE_TIMEOUT_MS) {
-            idle();
-        }
-
-        servo1.setPower(0);
-    }
-
-    // -------------------- Tag motifs --------------------
-    private String decodeMotifFromTagId(int tagId) {
-        switch (tagId) {
-            case 21:  return "gpp";
-            case 22:  return "pgp";
-            case 23:  return "ppg";
-            default: return "UNKNOWN";
-        }
-    }
-
-    private void updateLatchedMotif(LLResult result) {
-        if (motifLatched) return;
-        if (result == null || !result.isValid()) return;
-
-        List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
-        if (tags == null || tags.isEmpty()) return;
-
-        LLResultTypes.FiducialResult best = tags.get(0);
-        for (LLResultTypes.FiducialResult t : tags) {
-            if (t.getTargetArea() > best.getTargetArea()) best = t;
-        }
-
-        int id = best.getFiducialId();
-        String motif = decodeMotifFromTagId(id);
-
-        if (!"UNKNOWN".equals(motif)) {
-            motifLatched = true;
-            latchedTagId = id;
-            latchedMotif = motif;
-        }
-    }
-
-    private void telemetryTagMotifs(LLResult result) {
-        if (result == null || !result.isValid()) {
-            telemetry.addLine("Tags: none (no valid LL result)");
-            return;
-        }
-
-        List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
-        if (tags == null || tags.isEmpty()) {
-            telemetry.addLine("Tags: none detected");
-            return;
-        }
-
-        telemetry.addData("Tags Detected", tags.size());
-        for (int i = 0; i < tags.size(); i++) {
-            LLResultTypes.FiducialResult t = tags.get(i);
-            int id = t.getFiducialId();
-            telemetry.addData("April Tag Motif", decodeMotifFromTagId(id));
-        }
-    }
-
-    private Pose3D getBestTagPoseCameraSpace(LLResult result) {
-        if (result == null || !result.isValid()) return null;
-
-        List<LLResultTypes.FiducialResult> tags = result.getFiducialResults();
-        if (tags == null || tags.isEmpty()) return null;
-
-        LLResultTypes.FiducialResult best = tags.get(0);
-        for (LLResultTypes.FiducialResult t : tags) {
-            if (t.getTargetArea() > best.getTargetArea()) best = t;
-        }
-
-        return best.getTargetPoseCameraSpace();
-    }
-
-    // -------------------- Ball color + intake (PORTED STATE MACHINE) --------------------
-    private void telemetryBallColor() {
-        NormalizedRGBA c = ballColor.getNormalizedColors();
-        float[] hsv = new float[3];
-        Color.RGBToHSV((int)(c.red*255), (int)(c.green*255), (int)(c.blue*255), hsv);
-
-        telemetry.addData("BallHue", "%.0f", hsv[0]);
-        telemetry.addData("Ball HSV", "H=%.0f S=%.2f V=%.2f", hsv[0], hsv[1], hsv[2]);
-        telemetry.addData("Ball RGB", "r=%.2f g=%.2f b=%.2f", c.red, c.green, c.blue);
-        telemetry.addData("Ball", ballColorValue);
-    }
-
-    private void updateBallColor() {
-        NormalizedRGBA c = ballColor.getNormalizedColors();
-
-        float[] hsv = new float[3];
-        Color.RGBToHSV(
-                (int)(c.red   * 255),
-                (int)(c.green * 255),
-                (int)(c.blue  * 255),
-                hsv
-        );
-
-        float hue = hsv[0];
-        float sat = hsv[1];
-        float val = hsv[2];
-
-        boolean confident = (sat > 0.05) && (val > 0.009);
-
-        if (confident && (hue >= 120 && hue <= 180)) {
-            ballColorValue = "g";
-        } else if (confident && (hue >= 210 && hue <= 255)) {
-            ballColorValue = "p";
-        } else {
-            ballColorValue = null;
-        }
-    }
-
-    private boolean colorSeen() {
-        return ballColorValue != null && !ballColorValue.isEmpty();
-    }
-
-    private void assignSlot(int slotNumber) {
-        slots[slotNumber] = ballColorValue;
-    }
-
-    private int nextIntakeSlot(int current) {
-        return (current + INTAKE_SLOT_STEP + 3) % 3;
-    }
-
-    private INTAKEState waitStateForSlot(int slot) {
-        switch (slot) {
-            case 0: return INTAKEState.WAIT_COLOR_0;
-            case 1: return INTAKEState.WAIT_COLOR_1;
-            case 2: return INTAKEState.WAIT_COLOR_2;
-            default: return INTAKEState.WAIT_COLOR_0;
-        }
-    }
-
-    private boolean isWaitingForColor() {
-        return intakeState == INTAKEState.WAIT_COLOR_0
-                || intakeState == INTAKEState.WAIT_COLOR_1
-                || intakeState == INTAKEState.WAIT_COLOR_2;
-    }
-
-    private void merryGoRoundIntake() {
-        if (shootingBusy) {
-            servo1.setPower(0);
-            return;
-        }
-
-        boolean seen = colorSeen();
-        boolean newColorEvent = seen && !colorLatched;
-        if (seen) colorLatched = true;
-        else      colorLatched = false;
-
-        // (Optional) Ported “force skip when waiting and seeing none” using gamepad2.left_bumper in TeleOp.
-        // Auto doesn’t need it, but keeping it harmless for testing:
-        boolean forceSkip = gamepad2.left_bumper;
-        if (forceSkip && isWaitingForColor() && !seen) {
-            int fromSlot = currentSlot;
-            int toSlot = nextIntakeSlot(fromSlot);
-            rotateToIntakeSlotBlocking(toSlot);
-            currentSlot = toSlot;
-            intakeState = waitStateForSlot(toSlot);
-            colorLatched = false;
-            return;
-        }
-
-        switch (intakeState) {
-            case INIT_TO_SLOT0:
-                ensureKickerRetracted();
-                servo1.setPower(MGR_FAST_POWER);
-                if (atSlot0()) {
-                    servo1.setPower(0);
-                    currentSlot = 0;
-                    intakeState = INTAKEState.WAIT_COLOR_0;
-                }
-                break;
-
-            case WAIT_COLOR_0:
-                servo1.setPower(0);
-                if (newColorEvent) {
-                    assignSlot(0);
-                    intakeState = INTAKEState.MOVE_TO_SLOT1;
-                }
-                break;
-
-            case MOVE_TO_SLOT1:
-                ensureKickerRetracted();
-                servo1.setPower(MGR_FAST_POWER);
-                if (atSlot1()) {
-                    servo1.setPower(0);
-                    currentSlot = 1;
-                    intakeState = INTAKEState.WAIT_COLOR_1;
-                }
-                break;
-
-            case WAIT_COLOR_1:
-                servo1.setPower(0);
-                if (newColorEvent) {
-                    assignSlot(1);
-                    intakeState = INTAKEState.MOVE_TO_SLOT2;
-                }
-                break;
-
-            case MOVE_TO_SLOT2:
-                ensureKickerRetracted();
-                servo1.setPower(MGR_FAST_POWER);
-                if (atSlot2()) {
-                    servo1.setPower(0);
-                    currentSlot = 2;
-                    intakeState = INTAKEState.WAIT_COLOR_2;
-                }
-                break;
-
-            case WAIT_COLOR_2:
-                servo1.setPower(0);
-                if (newColorEvent) {
-                    assignSlot(2);
-                    intakeState = INTAKEState.DONE;
-                }
-                break;
-
-            case DONE:
-                servo1.setPower(0);
-                break;
-        }
-
-        telemetry.addData("Intake State", intakeState);
-        telemetry.addData("BallColor", ballColorValue);
-        telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
-    }
-
-    // -------------------- MANUAL fallback (TeleOp-aligned IMU field-centric) --------------------
-    private void sticksManualTeleopStyle() {
-        double rsx = -gamepad1.right_stick_x;
-        double lsy = -gamepad1.left_stick_y;
-        double lsx =  gamepad1.left_stick_x;
-        driveByIntentFieldCentric(lsy, lsx, rsx);
-    }
-
-    private void driveByIntentFieldCentric(double lsy, double lsx, double rsx) {
-        double yawDeg = imu1.getAngularOrientation(
-                AxesReference.INTRINSIC,
-                AxesOrder.ZYX,
-                AngleUnit.DEGREES
-        ).firstAngle;
-
-        double yawRad = Math.toRadians(yawDeg);
-
-        double drivePower  = lsy;
-        double strafePower = lsx;
-
-        double robotDrive  =  drivePower * Math.cos(yawRad) + strafePower * Math.sin(yawRad);
-        double robotStrafe = -drivePower * Math.sin(yawRad) + strafePower * Math.cos(yawRad);
-
-        driveByIntent(robotDrive, robotStrafe, rsx);
-        telemetry.addData("IMU yaw (deg)", "%.1f", yawDeg);
-    }
-
-    private void buttonsManualServo2() {
-        double now = getRuntime();
-        double dt = now - lastServo2Time;
-        lastServo2Time = now;
-        dt = Math.max(0, Math.min(0.1, dt));
-
-        if (gamepad2.dpad_up) {
-            servo2Pos += SERVO2_RATE * dt;
-        } else if (gamepad2.dpad_down) {
-            servo2Pos -= SERVO2_RATE * dt;
-        }
-
-        servo2Pos = Math.max(SERVO2_MIN, Math.min(SERVO2_MAX, servo2Pos));
-        servo2.setPosition(servo2Pos);
-        telemetry.addData("Shooter Position", "%.3f", servo2.getPosition());
-    }
-
-    // -------------------- Misc --------------------
-    private void stopDrive() {
-        motor0.setPower(0);
-        motor1.setPower(0);
-        motor2.setPower(0);
-        motor3.setPower(0);
-    }
-
-    private void getData() {
-        double mps0 = motor0.getCurrentPosition();
-        double mps1 = motor1.getCurrentPosition();
-        double mps2 = motor2.getCurrentPosition();
-        double mps3 = motor3.getCurrentPosition();
-
-        double mpw0 = motor0.getPower();
-        double mpw1 = motor1.getPower();
-        double mpw2 = motor2.getPower();
-        double mpw3 = motor3.getPower();
-
-        double mv0 = ((DcMotorEx) motor0).getVelocity();
-        double mv1 = ((DcMotorEx) motor1).getVelocity();
-        double mv2 = ((DcMotorEx) motor2).getVelocity();
-        double mv3 = ((DcMotorEx) motor3).getVelocity();
-
-        telemetry.addData("M Pos", "(%.1f, %.1f, %.1f, %.1f)", mps0, mps1, mps2, mps3);
-        telemetry.addData("M Power", "(%.1f, %.1f, %.1f, %.1f)", mpw0, mpw1, mpw2, mpw3);
-        telemetry.addData("M Velocity", "(%.1f, %.1f, %.1f, %.1f)", mv0, mv1, mv2, mv3);
-    }
 }

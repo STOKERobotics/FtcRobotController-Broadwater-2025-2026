@@ -51,9 +51,6 @@ import com.qualcomm.robotcore.hardware.SwitchableLight;
 import com.qualcomm.robotcore.hardware.AnalogInput;
 
 import android.graphics.Color;
-import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
-import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
-import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 
 import java.util.List;
@@ -89,6 +86,11 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private static final double ALIGN_MAX_POWER = 0.25;
     private static final double ALIGN_MIN_POWER = 0.08;     // helps overcome friction
     private static final long   ALIGN_STABLE_MS = 200;      // must stay within tolerance this long
+
+    // --- Emergency stop (drive) ---
+    private boolean driveEStop = false;
+    private boolean wasEStopCombo = false;
+    private boolean wasClearEStop = false;
 
     private boolean alignStableStarted = false;
     private long alignStableStartMs = 0;
@@ -155,9 +157,6 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private static final double MGR_BRAKE_POWER  = -0.30; // brake tap power
     private static final double MGR_BACKUP_POWER   = -0;  // stronger than -0.10
     private static final long   MGR_BACKUP_1DEG_MS = 0;
-
-    private static final long   MGR_LEAVE_SLOT_TIMEOUT_MS = 500;
-    private static final long   MGR_REENTER_TIMEOUT_MS    = 700;
 
     private boolean wasKickTrigger = false;
     private static final float KICK_TRIGGER_THRESHOLD = 0.6f; // adjust if you want
@@ -282,8 +281,8 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         mag2.setMode(DigitalChannel.Mode.INPUT);
         mag3.setMode(DigitalChannel.Mode.INPUT);
 
-        motor0b.setPower(.5);
-        motor1b.setPower(.5);
+        motor0b.setPower(.6);
+        motor1b.setPower(.6);
 
 
 
@@ -292,6 +291,8 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         if (opModeIsActive()) {
             while (opModeIsActive()) {
                 telemetry.clear();
+                updateDriveEStop();
+
                 lights();
                 if (motor0b.getPower() <=0){
                     motor0b.setPower(0.1);
@@ -302,15 +303,16 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 if (alignActive) {
                     telemetryLimeLight();  // only when aligning
                 }
-                // Start align: Controller 1 cross (gamepad1.y)
-                if (gamepad1.y && !alignActive) {
+                // Start align: Controller 2 cross (gamepad2.a)
+                if (gamepad2.a && !alignActive) {
                     alignActive = true;
                     txFiltered = 0.0;
                     alignStableStarted = false;
                 }
 
-                // Cancel align: Controller 1 circle (gamepad1.b)
-                if (gamepad1.b && alignActive) {
+
+                // Cancel align: Controller 2 circle (gamepad2.b)
+                if (gamepad2.b && alignActive) {
                     alignActive = false;
                     stopDrive();
                 }
@@ -326,8 +328,13 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                         alignActive = false;
                     }
                 } else {
-                    sticks1();
-                    buttons();   // manual controls
+                    if (driveEStop) {
+                        stopDrive();   // keep forcing 0 power
+                        buttons();     // still allow shooter/servo/etc if you want
+                    } else {
+                        sticks1();
+                        buttons();
+                    }
                 }
 
                 if (intakeState != INTAKEState.DONE) {
@@ -350,30 +357,6 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 telemetry.addData("Shooter power", motor0b.getPower());
                 telemetry.addData("SHOOT RAW", "m2=%s m3=%s", m2, m3);
                 telemetry.addData("ShootSlot()", getCurrentShootSlot());
-                /*
-                //
-                int intakeSlot = getCurrentIntakeSlot();   // mag0 / mag1
-                int shootSlot  = getCurrentShootSlot();    // mag2 / mag3
-
-
-                telemetry.addLine("=== TRAY SLOT STATUS ===");
-                telemetry.addData("Intake Slot (mag0/1)", intakeSlot >= 0 ? intakeSlot : "UNKNOWN");
-                telemetry.addData("Shoot Slot  (mag2/3)", shootSlot  >= 0 ? shootSlot  : "UNKNOWN");
-                telemetry.addData(
-                        "MAG RAW",
-                        "m0=%s m1=%s | m2=%s m3=%s",
-                        !mag0.getState(), !mag1.getState(),
-                        !mag2.getState(), !mag3.getState()
-                );
-
-                // Optional: show which frame the code is currently acting on
-                String activeFrame =
-                        shootingBusy               ? "SHOOTING"
-                                : intakeState != INTAKEState.DONE ? "INTAKE"
-                                : "IDLE";
-
-                telemetry.addData("Active Tray Frame", activeFrame);
-                */
                 telemetry.addData("Laser Dist", "%.0f mm  (%.1f in)", mm, inches);
                 telemetry.addData("Motif Listener", motifListenEnabled ? "ON" : "OFF");
                 telemetry.addData("Latched Motif", "%s (Tag %d)", latchedMotif, latchedTagId);
@@ -517,10 +500,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         double turn = tx * ALIGN_KP;   // flip sign if turns wrong way
         turn = Math.max(-ALIGN_MAX_POWER, Math.min(ALIGN_MAX_POWER, turn));
 
-        motor0.setPower(-turn); // FR
-        motor1.setPower(turn);  // BL
-        motor2.setPower(-turn); // FL
-        motor3.setPower(turn);  // BR
+        driveRobotCentric(0, 0, turn);
 
         return false;
     }
@@ -541,6 +521,25 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
         rotateToSlotBlocking(next);
     }
+    private void updateDriveEStop() {
+        // Engage: press BOTH stick buttons
+        boolean combo = gamepad1.left_stick_button && gamepad1.right_stick_button;
+        if (combo && !wasEStopCombo) {
+            driveEStop = true;
+            stopDrive();
+        }
+        wasEStopCombo = combo;
+
+        // Clear: press A (only if you want)
+        boolean clear = gamepad1.a;
+        if (clear && !wasClearEStop) {
+            driveEStop = false;
+        }
+        wasClearEStop = clear;
+
+        telemetry.addData("DRIVE E-STOP", driveEStop ? "ENGAGED" : "OK");
+    }
+
 
 
     private void adjustShooterAndFire() {
@@ -597,6 +596,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         }
 
         telemetry.addLine("Shoot sequence done!");
+        returnTrayToIntakeSlot0();
     }
 
     private boolean atShootSlot(int slot) {
@@ -686,7 +686,22 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 || intakeState == INTAKEState.WAIT_COLOR_1
                 || intakeState == INTAKEState.WAIT_COLOR_2;
     }
+    private void driveRobotCentric(double y, double x, double rx) {
+        double fl = y + x + rx; // motor2 (FL)
+        double fr = y - x - rx; // motor0 (FR)
+        double bl = y - x + rx; // motor1 (BL)
+        double br = y + x - rx; // motor3 (BR)
 
+        double max = Math.max(1.0,
+                Math.max(Math.abs(fl),
+                        Math.max(Math.abs(fr),
+                                Math.max(Math.abs(bl), Math.abs(br)))));
+
+        motor2.setPower(fl / max);
+        motor0.setPower(fr / max);
+        motor1.setPower(bl / max);
+        motor3.setPower(br / max);
+    }
     private void rotateToSlotBlocking(int targetSlot) {
         shootingBusy = true;
         try {
@@ -918,6 +933,45 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private void assignSlot(int slotNumber) {
         slots[slotNumber] = ballColorValue;
     }
+    private void returnTrayToIntakeSlot0() {
+        shootingBusy = true;
+        try {
+            ensureKickerRetracted();
+
+            // If we're already at intake slot 0, force a clean leave first
+            if (atSlot0()) {
+                servo1.setPower(MGR_CRAWL_POWER);
+                long leaveStart = System.currentTimeMillis();
+                while (opModeIsActive()
+                        && atSlot0()
+                        && (System.currentTimeMillis() - leaveStart) < 400) {
+                    idle();
+                }
+                servo1.setPower(0);
+            }
+
+            // Rotate until intake slot 0 is detected
+            long start = System.currentTimeMillis();
+            servo1.setPower(MGR_FAST_POWER);
+
+            while (opModeIsActive()
+                    && !atSlot0()
+                    && (System.currentTimeMillis() - start) < MGR_MOVE_TIMEOUT_MS) {
+                idle();
+            }
+
+            servo1.setPower(0);
+
+            // Reset intake state machine so it is READY to accept balls
+            currentSlot = 0;
+            intakeState = INTAKEState.WAIT_COLOR_0;
+            colorLatched = false;
+
+        } finally {
+            servo1.setPower(0);
+            shootingBusy = false;
+        }
+    }
 
     private void merryGoRoundIntake() {
         // If shooter/tray rotation is happening, don't fight it
@@ -1137,11 +1191,11 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         } else if (gamepad2.dpad_down) {
             servo2Pos -= SERVO2_RATE * dt;
         }
-        if (gamepad2.dpadLeftWasPressed()) {
+        if (gamepad2.dpadRightWasPressed()) {
             motor0b.setPower(motor0b.getPower() + .1);
             motor1b.setPower(motor1b.getPower() + .1);
         }
-        if (gamepad2.dpadRightWasPressed()) {
+        if (gamepad2.dpadLeftWasPressed()) {
             motor0b.setPower(motor0b.getPower() - .1);
             motor1b.setPower(motor1b.getPower() - .1);
         }
@@ -1192,7 +1246,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         if (gamepad2.y && !wasStepShootPressed) {
             stepToNextSlotAndShoot();
         }
-        wasStepShootPressed = gamepad2.b;
+        wasStepShootPressed = gamepad2.y;
 
     }
 
