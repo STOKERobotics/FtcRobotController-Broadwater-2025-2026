@@ -1071,7 +1071,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
             int dBL_fixed = -dBL;
 
             // Mecanum forward-axis ticks (signed)
-            double forwardTicks = (dFL + dFR + dBL_fixed + dBR) / 4.0;
+            double forwardTicks = (dFL + dFR + dBL + dBR) / 4.0;
 
             if (Math.abs(forwardTicks) >= ticksTarget) break;
 
