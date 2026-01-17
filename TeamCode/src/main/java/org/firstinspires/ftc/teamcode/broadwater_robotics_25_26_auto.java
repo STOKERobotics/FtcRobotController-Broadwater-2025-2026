@@ -282,10 +282,12 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         // ---- Drive backward 0.5 meter ----
         //driveForwardMeters(0.5, -0.4);
         sleep(5000);
+        telemetry.update();
         sleep(5000);
         // ---- Turn right 35 degrees ----
         turnRightDegrees(15.0, 0.25);
         sleep(5000);
+        telemetry.update();
         sleep(5000);
 
         while (opModeIsActive() && intakeState != INTAKEState.DONE) {
@@ -438,7 +440,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         }
 
         // --- Turn only (robot-centric) ---
-        double turn = tx * ALIGN_KP;   // flip sign if turns wrong way
+        double turn = -tx * ALIGN_KP;   // flip sign if turns wrong way
         turn = Math.max(-ALIGN_MAX_POWER, Math.min(ALIGN_MAX_POWER, turn));
 
         driveRobotCentric(0, 0, turn);
