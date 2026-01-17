@@ -1016,56 +1016,65 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     }
 
     private void driveForwardMeters(double meters, double power) {
-        // Ensure we're in encoder mode (but NOT RUN_TO_POSITION, since we're "driving sticks")
         setDriveRunUsingEncoder();
 
-        // Convert meters -> ticks (your constants must exist)
+        // meters -> wheel ticks (wheel circumference is still correct for forward motion)
         int ticksTarget = (int) Math.round((Math.abs(meters) / WHEEL_CIRCUMFERENCE_M) * TICKS_PER_WHEEL_REV);
-        int direction = (meters >= 0) ? -1 : +1; // +forward, -backward
 
+        // Your mapping: LSY + = forward, - = backward
+        int dir = (meters >= 0) ? +1 : -1;
+
+        // Record start encoder positions (SIGNED)
         int startFR = motor0.getCurrentPosition();
         int startBL = motor1.getCurrentPosition();
         int startFL = motor2.getCurrentPosition();
         int startBR = motor3.getCurrentPosition();
 
-        // Desired final motor power magnitude (0..1)
         double p = clip(Math.abs(power), 0.0, 1.0);
 
-        // sticks2() multiplies by gain; in Auto gain will usually be 0.5, so compensate
+        // sticks2 gain is 0.5 unless left_bumper is held (auto usually not holding it)
         double gain = (gamepad1.left_bumper) ? 1.0 : 0.5;
-        double stickLSY = clip(direction * (p / gain), -1.0, 1.0);
+        double stickLSY = clip(dir * (p / gain), -1.0, 1.0);
 
         long startMs = System.currentTimeMillis();
-        long timeoutMs = 6000; // adjust as needed
+        long timeoutMs = 6000;
 
         while (opModeIsActive() && (System.currentTimeMillis() - startMs) < timeoutMs) {
-            // Progress by average absolute delta ticks across 4 motors
-            int dFR = Math.abs(motor0.getCurrentPosition() - startFR);
-            int dBL = Math.abs(motor1.getCurrentPosition() - startBL);
-            int dFL = Math.abs(motor2.getCurrentPosition() - startFL);
-            int dBR = Math.abs(motor3.getCurrentPosition() - startBR);
-            int avg = (dFR + dBL + dFL + dBR) / 4;
 
-            if (avg >= ticksTarget) break;
+            int dFR = motor0.getCurrentPosition() - startFR; // FR
+            int dBL = motor1.getCurrentPosition() - startBL; // BL (motor1 is REVERSE)
+            int dFL = motor2.getCurrentPosition() - startFL; // FL
+            int dBR = motor3.getCurrentPosition() - startBR; // BR
 
-            // "Virtual sticks": forward/back only
+// Flip BL encoder delta because motor1 is Direction.REVERSE
+            int dBL_fixed = -dBL;
+
+// Mecanum forward-axis ticks (signed)
+            double forwardTicks = (dFL + dFR + dBL_fixed + dBR) / 4.0;
+
+
+            if (Math.abs(forwardTicks) >= ticksTarget) break;
+
+            // Virtual sticks: forward only
             LSY = (float) stickLSY;
             LSX = 0f;
             RSX = 0f;
 
             sticks2();
 
-            telemetry.addData("DriveFwd", "m=%.2f targetTicks=%d avg=%d", meters, ticksTarget, avg);
-            telemetry.addData("FR/FL", "%d / %d", motor0.getCurrentPosition(), motor2.getCurrentPosition());
+            telemetry.addData("DriveFwd", "m=%.2f target=%d fwdTicks=%.0f",
+                    meters, ticksTarget, forwardTicks);
+            telemetry.addData("Enc d", "FL=%d FR=%d BL=%d BR=%d", dFL, dFR, dBL, dBR);
             telemetryUpdateThrottled();
             idle();
         }
 
-        // Stop and clear sticks
+        // stop
         LSY = 0f; LSX = 0f; RSX = 0f;
         sticks2();
         stopDrive();
     }
+
 
     private double getYawDeg() {
         // ZYX: firstAngle = Z (yaw)
@@ -1086,25 +1095,22 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     // ---------------- Movement: Turn right (IMU) ----------------
     // ---------------- Movement: Turn right (IMU) ----------------
     private void turnRightDegrees(double degrees, double maxPower) {
-        // Convention you stated: LSX + = rotate right, LSX - = rotate left
-        // We'll treat positive "degrees" as "turn right".
         double startYaw = getYawDeg();
-        double targetYaw = angleWrapDeg(startYaw - degrees); // if your yaw sign is opposite, flip this
+        double targetYaw = angleWrapDeg(startYaw - degrees); // right turn typically decreases yaw
 
         final double TOL_DEG = 2.0;
-        final double MIN_OUT = 0.10;   // minimum final motor power to overcome friction
+        final double MIN_OUT = 0.10;
         final double KP      = 0.012;
         final long   TIMEOUT = 4000;
 
         double pMax = clip(Math.abs(maxPower), 0.0, 1.0);
 
-        // sticks2() multiplies by gain; in Auto gain will usually be 0.5, so compensate
         double gain = (gamepad1.left_bumper) ? 1.0 : 0.5;
 
         long startMs = System.currentTimeMillis();
         while (opModeIsActive() && (System.currentTimeMillis() - startMs) < TIMEOUT) {
             double yaw = getYawDeg();
-            double err = angleWrapDeg(targetYaw - yaw); // [-180, 180]
+            double err = angleWrapDeg(targetYaw - yaw);
 
             telemetry.addData("Turn", "start=%.1f target=%.1f yaw=%.1f err=%.1f",
                     startYaw, targetYaw, yaw, err);
@@ -1112,22 +1118,16 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
             if (Math.abs(err) <= TOL_DEG) break;
 
-            // Compute desired FINAL (post-gain) rotation output
             double out = err * KP;
             out = clip(out, -pMax, pMax);
 
-            // Enforce minimum output while still far away
             if (Math.abs(out) < MIN_OUT) out = MIN_OUT * Math.signum(out);
+            if (Math.abs(err) < 10.0) out = clip(out, -0.18, 0.18);
 
-            // Slow down near target to reduce overshoot
-            if (Math.abs(err) < 10.0) {
-                out = clip(out, -0.18, 0.18);
-            }
-
-            // Convert final output -> stick value (pre-gain)
+            // Convert desired final rotate to stick (pre-gain)
             double stickLSX = clip(out / gain, -1.0, 1.0);
 
-            // "Virtual sticks": rotate only (right positive, left negative)
+            // Pure mecanum rotation (no drive/strafe)
             LSY = 0f;
             RSX = 0f;
             LSX = (float) stickLSX;
@@ -1136,11 +1136,11 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
             idle();
         }
 
-        // Stop and clear sticks
         LSY = 0f; LSX = 0f; RSX = 0f;
         sticks2();
         stopDrive();
         sleep(120);
     }
+
 
 }
