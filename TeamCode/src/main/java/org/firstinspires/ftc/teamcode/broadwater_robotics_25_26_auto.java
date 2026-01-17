@@ -261,11 +261,13 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         motor0b.setPower(.6);
         motor1b.setPower(.6);
 
-
-
-        // ---- Drive forward 1 meter ----
-        driveForwardMeters(1.0, -0.6);
-
+        waitForStart();
+        if (opModeIsActive()) {
+            while (opModeIsActive()) {
+                // ---- Drive forward 1 meter ----
+                driveForwardMeters(1.0, -0.6);
+            }
+        }
         // ---- Drive backward 0.5 meter ----
         //driveForwardMeters(0.5, -0.4);
 
