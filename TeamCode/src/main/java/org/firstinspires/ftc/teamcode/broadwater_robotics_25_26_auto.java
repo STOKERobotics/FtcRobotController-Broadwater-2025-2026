@@ -281,9 +281,13 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
         // ---- Drive backward 0.5 meter ----
         //driveForwardMeters(0.5, -0.4);
-
+        sleep(5000);
+        sleep(5000);
         // ---- Turn right 35 degrees ----
-        turnRightDegrees(35.0, 0.25);
+        turnRightDegrees(5.0, 0.25);
+        sleep(5000);
+        sleep(5000);
+        
         while (opModeIsActive() && intakeState != INTAKEState.DONE) {
             telemetryUpdateThrottled();
             updateBallColor();
