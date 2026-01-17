@@ -266,6 +266,11 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
             while (opModeIsActive()) {
                 // ---- Drive forward 1 meter ----
                 driveForwardMeters(1.0, -0.6);
+                telemetryLimeLight();
+                motifLatched = false;
+                latchedMotif = "NONE";
+                latchedTagId = -1;
+                updateMotifListener();
             }
         }
         // ---- Drive backward 0.5 meter ----
@@ -1019,6 +1024,9 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         motor2.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         motor3.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
     }
+    // --- Heading hold fixes ---
+    private static final double HEADING_SIGN = +1.0; // +1 works for most bots; if it still turns wrong, set to -1
+    private static final double HEADING_DEADBAND_DEG = 0.25; // was 1.0; start correcting sooner
 
     private void driveForwardMeters(double meters, double power) {
         setDriveRunUsingEncoder();
@@ -1056,50 +1064,53 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         double stickLSY = clip(dir * (p / gain), -1.0, 1.0);
 
         // ---- IMU heading-hold tuning ----
-        final double HEADING_KP = 0.015;     // start 0.01-0.02
-        final double MAX_CORR   = 0.20;      // cap correction (final output)
-        final double DEAD_BAND  = 1.0;       // deg: ignore tiny drift
+        final double HEADING_KP = 0.015;
+        final double MAX_CORR   = 0.20;
         final long   TIMEOUT_MS = 6000;
 
         long startMs = System.currentTimeMillis();
 
         while (opModeIsActive() && (System.currentTimeMillis() - startMs) < TIMEOUT_MS) {
             int dFR = motor0.getCurrentPosition() - startFR; // FR
-            int dBL = motor1.getCurrentPosition() - startBL; // BL (motor1 is REVERSE)
+            int dBL = motor1.getCurrentPosition() - startBL; // BL (already respects motor direction)
             int dFL = motor2.getCurrentPosition() - startFL; // FL
             int dBR = motor3.getCurrentPosition() - startBR; // BR
 
-            // Flip BL encoder delta because motor1 direction is REVERSE
-            int dBL_fixed = -dBL;
+            // ---- Distance estimator (robust): average of magnitudes ----
+            // This prevents sign-cancellation (your main "drives too far" bug).
+            double travelTicks = (Math.abs(dFL) + Math.abs(dFR) + Math.abs(dBL) + Math.abs(dBR)) / 4.0;
 
-            // Mecanum forward-axis ticks (signed)
-            double forwardTicks = (dFL + dFR + dBL + dBR) / 4.0;
+            // Optional: signed forward estimate (telemetry/debug only)
+            double forwardTicksSigned = (dFL + dFR + dBL + dBR) / 4.0;
 
-            if (Math.abs(forwardTicks) >= ticksTarget) break;
+            if (travelTicks >= ticksTarget) break;
 
             // ---- Heading correction ----
             double yaw = getYawDeg();
-            double errDeg = angleWrapDeg(startYaw - yaw); // positive means we drifted right (depending on your IMU sign)
 
-            // deadband
-            if (Math.abs(errDeg) < DEAD_BAND) errDeg = 0;
+            // Error is "how far we've drifted from startYaw"
+            // Use yaw-start and a sign multiplier so it corrects the right way.
+            double errDeg = angleWrapDeg(yaw - startYaw);
 
-            // desired FINAL rotation output
-            double corr = clip(errDeg * HEADING_KP, -MAX_CORR, MAX_CORR);
+            if (Math.abs(errDeg) < HEADING_DEADBAND_DEG) errDeg = 0.0;
+
+            // If yaw drifted +, we want a - turn (most bots). HEADING_SIGN lets you match your IMU/drive sign.
+            double corr = clip((-HEADING_SIGN) * errDeg * HEADING_KP, -MAX_CORR, MAX_CORR);
 
             // convert final rotation -> stick (pre-gain)
             double stickLSX = clip(corr / gain, -1.0, 1.0);
 
             // Virtual sticks:
-            // LSY drives forward/back, LSX applies yaw correction, RSX no strafe
-            LSY = (float) stickLSY;
-            LSX = (float) stickLSX;
-            RSX = 0f;
+            LSY = (float) stickLSY;   // forward/back
+            LSX = (float) stickLSX;   // correction turn
+            RSX = 0f;                 // no strafe
 
             sticks2();
 
-            telemetry.addData("DriveIMU", "dist=%.2fm target=%d fwdTicks=%.0f", distM, ticksTarget, forwardTicks);
-            telemetry.addData("HeadingHold", "start=%.1f yaw=%.1f err=%.1f corr=%.2f", startYaw, yaw, errDeg, corr);
+            telemetry.addData("DriveIMU", "dist=%.2fm target=%d travelTicks=%.0f fwdTicks=%.0f",
+                    distM, ticksTarget, travelTicks, forwardTicksSigned);
+            telemetry.addData("HeadingHold", "start=%.1f yaw=%.1f err=%.1f corr=%.2f",
+                    startYaw, yaw, errDeg, corr);
             telemetryUpdateThrottled();
             idle();
         }
@@ -1109,6 +1120,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         sticks2();
         stopDrive();
     }
+
 
 
 
