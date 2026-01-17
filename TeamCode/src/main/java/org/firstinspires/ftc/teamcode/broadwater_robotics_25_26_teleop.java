@@ -88,9 +88,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private static final long   ALIGN_STABLE_MS = 200;      // must stay within tolerance this long
 
     // --- Emergency stop (drive) ---
-    private boolean driveEStop = false;
-    private boolean wasEStopCombo = false;
-    private boolean wasClearEStop = false;
+
 
     private boolean alignStableStarted = false;
     private long alignStableStartMs = 0;
@@ -296,7 +294,6 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
             while (opModeIsActive()) {
                 balanceShooterRPM(shooterBasePower);
                 telemetry.clear();
-                updateDriveEStop();
 
                 lights();
 
@@ -327,13 +324,8 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                         alignActive = false;
                     }
                 } else {
-                    if (driveEStop) {
-                        stopDrive();   // keep forcing 0 power
-                        buttons();     // still allow shooter/servo/etc if you want
-                    } else {
-                        sticks1();
-                        buttons();
-                    }
+                    sticks1();
+                    buttons();
                 }
 
                 if (intakeState != INTAKEState.DONE) {
@@ -568,24 +560,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
         rotateToSlotBlocking(next);
     }
-    private void updateDriveEStop() {
-        // Engage: press BOTH stick buttons
-        boolean combo = gamepad1.left_stick_button && gamepad1.right_stick_button;
-        if (combo && !wasEStopCombo) {
-            driveEStop = true;
-            stopDrive();
-        }
-        wasEStopCombo = combo;
 
-        // Clear: press A (only if you want)
-        boolean clear = gamepad1.a;
-        if (clear && !wasClearEStop) {
-            driveEStop = false;
-        }
-        wasClearEStop = clear;
-
-        telemetry.addData("DRIVE E-STOP", driveEStop ? "ENGAGED" : "OK");
-    }
 
 
 
