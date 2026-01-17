@@ -287,21 +287,19 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         turnRightDegrees(5.0, 0.25);
         sleep(5000);
         sleep(5000);
-        
+
         while (opModeIsActive() && intakeState != INTAKEState.DONE) {
             telemetryUpdateThrottled();
             updateBallColor();
             merryGoRoundIntake();
             telemetryBallColor();
-
+            alignToTarget();
 //            telemetry.update(); // flush to Driver Station
             idle();
         }
         sleep(5000);
         sleep(5000);
-            alignToTarget();
-        sleep(5000);
-        sleep(5000);
+
         // (Optional) keep running shooter/intake, or stop them:
         // motor0b.setPower(0);
         // motor1b.setPower(0);
