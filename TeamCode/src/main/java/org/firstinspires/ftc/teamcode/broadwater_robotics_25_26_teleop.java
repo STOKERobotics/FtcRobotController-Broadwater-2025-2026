@@ -190,7 +190,8 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     // ---------------- Shooter RPM balancing ----------------
     private static final double SHOOTER_BAL_KP = 0.00025; // tune: start 0.00015..0.00040
     private static final double SHOOTER_BAL_MAX_ADJ = 0.12; // max +/- added to base power
-    private static final double SHOOTER_MIN_ACTIVE_POWER = 0.8; // don't balance below this
+    private static final double SHOOTER_MIN_ACTIVE_POWER = 0.08; // don't balance below this
+    private boolean mgrRetractDone = false;
 
     private double shooterBasePower = 0.60; // "set power" you want (update this when you change power)
 
@@ -1142,13 +1143,14 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         switch (intakeState) {
 
             case INIT_TO_SLOT0:
-                ensureKickerRetracted();
+                if (!mgrRetractDone) { ensureKickerRetracted(); mgrRetractDone = true; }
                 servo1.setPower(MGR_FAST_POWER);
                 if (atSlot0()) {
                     servo1.setPower(0);
                     currentSlot = 0;
                     intakeState = INTAKEState.WAIT_COLOR_0;
                     colorLatched = false;
+                    mgrRetractDone = false; // reset for the next move
                 }
                 break;
 
@@ -1160,14 +1162,16 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 }
                 break;
 
+
             case MOVE_TO_SLOT1:
-                ensureKickerRetracted();
+                if (!mgrRetractDone) { ensureKickerRetracted(); mgrRetractDone = true; }
                 servo1.setPower(MGR_FAST_POWER);
                 if (atSlot1()) {
                     servo1.setPower(0);
                     currentSlot = 1;
                     intakeState = INTAKEState.WAIT_COLOR_1;
                     colorLatched = false;
+                    mgrRetractDone = false;
                 }
                 break;
 
@@ -1180,13 +1184,14 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 break;
 
             case MOVE_TO_SLOT2:
-                ensureKickerRetracted();
+                if (!mgrRetractDone) { ensureKickerRetracted(); mgrRetractDone = true; }
                 servo1.setPower(MGR_FAST_POWER);
                 if (atSlot2()) {
                     servo1.setPower(0);
                     currentSlot = 2;
                     intakeState = INTAKEState.WAIT_COLOR_2;
                     colorLatched = false;
+                    mgrRetractDone = false;
                 }
                 break;
 
