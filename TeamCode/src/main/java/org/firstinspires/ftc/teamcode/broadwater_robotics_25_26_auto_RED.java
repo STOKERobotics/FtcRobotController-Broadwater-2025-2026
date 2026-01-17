@@ -30,7 +30,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 
 import java.util.List;
 
-@Autonomous(name = "Broadwater Auto: 1m + Turn35 + SpinUp")
+@Autonomous(name = "Broadwater Auto Red")
 public class broadwater_robotics_25_26_auto_RED extends LinearOpMode {
 
     private DcMotor motor0; // Drive FR
@@ -254,7 +254,7 @@ public class broadwater_robotics_25_26_auto_RED extends LinearOpMode {
         mag1.setMode(DigitalChannel.Mode.INPUT);
         mag2.setMode(DigitalChannel.Mode.INPUT);
         mag3.setMode(DigitalChannel.Mode.INPUT);
-        redLED.setState(!isRedOn);
+        blueLED.setState(!isBlueOn);
 
 
         waitForStart();
@@ -291,12 +291,21 @@ public class broadwater_robotics_25_26_auto_RED extends LinearOpMode {
 
         ElapsedTime timer = new ElapsedTime();
         timer.reset();
-        while (opModeIsActive() && !align && timer.seconds() < 5.0){
-           align = alignToTarget();
+        int aCount = 0;
+        while (opModeIsActive() && !align ){
+            telemetry.addData("aCount", "0=%s", aCount);
+            telemetry.update();
+            align = alignToTarget();
+            aCount += 1;
         }
         telemetry.update();
+        int sCount= 0;
         while (opModeIsActive() && !shoot){
+            telemetry.addData("sCount", "0=%s", sCount);
+            telemetry.update();
             adjustShooterAndFire();
+            sCount += 1;
+
         }
     }
 
