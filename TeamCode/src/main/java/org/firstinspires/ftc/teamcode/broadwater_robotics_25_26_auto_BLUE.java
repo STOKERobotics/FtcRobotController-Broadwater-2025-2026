@@ -261,7 +261,6 @@ public class broadwater_robotics_25_26_auto_BLUE extends LinearOpMode {
         motifListenEnabled = true;     // auto must enable it
         motifLatched = false;
         driveForwardMeters(0.1, -0.6);
-//        telemetryLimeLight();
         motifLatched = false;
         latchedMotif = "NONE";
         latchedTagId = -1;
@@ -292,8 +291,15 @@ public class broadwater_robotics_25_26_auto_BLUE extends LinearOpMode {
 
            align = alignToTarget();
         }
+        telemetry.update();
+        int sCount= 0;
         while (opModeIsActive() && !shoot){
+            telemetryLimeLight();
+            telemetry.addData("sCount", "0=%s", sCount);
+            telemetry.update();
             adjustShooterAndFire();
+            sCount += 1;
+
         }
     }
 
