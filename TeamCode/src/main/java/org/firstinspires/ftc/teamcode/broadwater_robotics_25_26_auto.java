@@ -1098,7 +1098,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
             double travelTicks = (Math.abs(dFL) + Math.abs(dFR) + Math.abs(dBL) + Math.abs(dBR)) / 4.0;
 
             // Optional: signed forward estimate (telemetry/debug only)
-            double forwardTicksSigned = (dFL + dFR + dBL_fixed + dBR) / 4.0;
+            double forwardTicksSigned = (dFL + dFR + dBL + dBR) / 4.0;
 
             if (travelTicks >= ticksTarget) break;
 
