@@ -294,6 +294,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
             motor2b.setPower(1);
             while (opModeIsActive()) {
+                balanceShooterRPM(shooterBasePower);
                 telemetry.clear();
                 updateDriveEStop();
 

@@ -278,7 +278,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
         // ---- Turn right 35 degrees ----
         turnRightDegrees(35.0, 0.25);
-
+        alignToTarget();
         // (Optional) keep running shooter/intake, or stop them:
         // motor0b.setPower(0);
         // motor1b.setPower(0);
