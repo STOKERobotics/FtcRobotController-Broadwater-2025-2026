@@ -264,11 +264,11 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
 
         // ---- Drive forward 1 meter ----
-        driveForwardMeters(1.0, +0.6);
+        driveForwardMeters(1.0, -0.6);
 
         // ---- Drive backward 0.5 meter ----
         //driveForwardMeters(0.5, -0.4);
-        
+
         // ---- Turn right 35 degrees ----
         turnRightDegrees(35.0, 0.25);
 
@@ -1023,7 +1023,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
         // Distance is always magnitude
         double distM = Math.abs(meters);
-        if (distM < 1e-6) return; // nothing to do
+        if (distM < 1e-6) return;
 
         // Direction comes ONLY from power sign
         if (Math.abs(power) < 1e-6) {
@@ -1041,19 +1041,27 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         int startFL = motor2.getCurrentPosition();
         int startBR = motor3.getCurrentPosition();
 
+        // Heading hold reference
+        double startYaw = getYawDeg();
+
         // Magnitude of requested power (0..1)
         double p = clip(Math.abs(power), 0.0, 1.0);
 
         // sticks2 gain is 0.5 unless left_bumper is held
         double gain = (gamepad1.left_bumper) ? 1.0 : 0.5;
 
-        // Convert desired final power -> stick input (pre-gain)
+        // Convert desired final forward power -> stick input (pre-gain)
         double stickLSY = clip(dir * (p / gain), -1.0, 1.0);
 
-        long startMs = System.currentTimeMillis();
-        long timeoutMs = 6000;
+        // ---- IMU heading-hold tuning ----
+        final double HEADING_KP = 0.015;     // start 0.01-0.02
+        final double MAX_CORR   = 0.20;      // cap correction (final output)
+        final double DEAD_BAND  = 1.0;       // deg: ignore tiny drift
+        final long   TIMEOUT_MS = 6000;
 
-        while (opModeIsActive() && (System.currentTimeMillis() - startMs) < timeoutMs) {
+        long startMs = System.currentTimeMillis();
+
+        while (opModeIsActive() && (System.currentTimeMillis() - startMs) < TIMEOUT_MS) {
             int dFR = motor0.getCurrentPosition() - startFR; // FR
             int dBL = motor1.getCurrentPosition() - startBL; // BL (motor1 is REVERSE)
             int dFL = motor2.getCurrentPosition() - startFL; // FL
@@ -1067,14 +1075,29 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
             if (Math.abs(forwardTicks) >= ticksTarget) break;
 
-            // Virtual sticks: forward/back only (sign comes from stickLSY)
+            // ---- Heading correction ----
+            double yaw = getYawDeg();
+            double errDeg = angleWrapDeg(startYaw - yaw); // positive means we drifted right (depending on your IMU sign)
+
+            // deadband
+            if (Math.abs(errDeg) < DEAD_BAND) errDeg = 0;
+
+            // desired FINAL rotation output
+            double corr = clip(errDeg * HEADING_KP, -MAX_CORR, MAX_CORR);
+
+            // convert final rotation -> stick (pre-gain)
+            double stickLSX = clip(corr / gain, -1.0, 1.0);
+
+            // Virtual sticks:
+            // LSY drives forward/back, LSX applies yaw correction, RSX no strafe
             LSY = (float) stickLSY;
-            LSX = 0f;
+            LSX = (float) stickLSX;
             RSX = 0f;
+
             sticks2();
 
-            telemetry.addData("DriveFB", "dist=%.2fm target=%d fwdTicks=%.0f stickLSY=%.2f",
-                    distM, ticksTarget, forwardTicks, stickLSY);
+            telemetry.addData("DriveIMU", "dist=%.2fm target=%d fwdTicks=%.0f", distM, ticksTarget, forwardTicks);
+            telemetry.addData("HeadingHold", "start=%.1f yaw=%.1f err=%.1f corr=%.2f", startYaw, yaw, errDeg, corr);
             telemetryUpdateThrottled();
             idle();
         }
