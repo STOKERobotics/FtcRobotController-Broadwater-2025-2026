@@ -166,7 +166,8 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     private boolean wasButtonBPressed = false;
     private Limelight3A limelight;
     String[] slots = new String[3];
-
+    private boolean shoot = false;
+    private boolean align = false;
     @Override
     public void runOpMode() {
         initLimelight();
@@ -199,10 +200,6 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         blueLED = hardwareMap.get(DigitalChannel.class, "blueLED");
         redLED.setMode(DigitalChannel.Mode.OUTPUT);
         blueLED.setMode(DigitalChannel.Mode.OUTPUT);
-
-
-
-
 
         // Put initialization blocks here.
         motor0.setDirection(DcMotor.Direction.FORWARD);
@@ -271,6 +268,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         motifLatched = false;
         latchedMotif = "NONE";
         latchedTagId = -1;
+        telemetry.update();
 
         while(opModeIsActive() && !motifLatched) {
             updateMotifListener();
@@ -282,23 +280,27 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         // ---- Drive backward 0.5 meter ----
         //driveForwardMeters(0.5, -0.4);
         sleep(5000);
-        telemetry.update();
-        sleep(5000);
-        // ---- Turn right 35 degrees ----
+        telemetry.update();// ---- Turn right 35 degrees ----
         turnRightDegrees(15.0, 0.25);
         sleep(5000);
         telemetry.update();
-        sleep(5000);
 
         while (opModeIsActive() && intakeState != INTAKEState.DONE) {
             telemetryUpdateThrottled();
             updateBallColor();
             merryGoRoundIntake();
             telemetryBallColor();
-            alignToTarget();
 //            telemetry.update(); // flush to Driver Station
             idle();
         }
+
+        while (!align){
+           align = alignToTarget();
+        }
+        while (opModeIsActive() && !shoot){
+            adjustShooterAndFire();
+        }
+
         sleep(5000);
         sleep(5000);
 
@@ -320,7 +322,66 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     private long lastTelemMs = 0;
     private static final long TELEM_PERIOD_MS = 100; // 10Hz
 
+    private void adjustShooterAndFire() {
+        if (!motifLatched || latchedMotif == null || latchedMotif.length() != 3 || "UNKNOWN".equals(latchedMotif)) {
+            telemetry.addLine("Shooter: No valid motif latched");
+            return;
+        }
+        if (!allSlotsLoaded()) {
+            telemetry.addLine("Shooter: Slots not all loaded yet");
+            telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
+            return;
+        }
+        if (lastTagDistanceIn <= 0) {
+            telemetry.addLine("Shooter: No tag distance");
+            return;
+        }
 
+        double distanceInches = lastTagDistanceIn;
+        double normalized = Math.max(0, Math.min(1,
+                (distanceInches - SHOOTER_MIN_DIST) / (SHOOTER_MAX_DIST - SHOOTER_MIN_DIST)));
+
+        double servoAngle = SERVO_MAX_ANGLE - (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) * normalized;
+        servo2.setPosition(.65);
+
+        telemetry.addData("Motif", latchedMotif);
+        telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
+        telemetry.addData("Dist(in)", "%.1f", distanceInches);
+        telemetry.addData("Kicker Angle", "%.2f", servoAngle);
+
+        for (int i = 0; i < 3; i++) slotFired[i] = false;
+
+        char[] order = latchedMotif.toCharArray();
+
+        for (int shotIndex = 0; shotIndex < 3 && opModeIsActive(); shotIndex++) {
+            char wanted = order[shotIndex];
+
+            int slotToShoot = findSlotForColor(wanted);
+            if (slotToShoot < 0) {
+                telemetry.addData("Shooter", "Missing color '%c' in slots (or already used)", wanted);
+                return;
+            }
+
+            telemetry.addData("Shooting", "shot %d wants %c -> slot %d", shotIndex, wanted, slotToShoot);
+
+            int shootFrameSlot = intakeSlotToShootSlot(slotToShoot);
+            rotateToSlotBlocking(shootFrameSlot);
+            kickOnce();
+
+            // Mark fired + clear stored color so it can be reloaded
+            slotFired[slotToShoot] = true;
+            slots[slotToShoot] = null;
+
+            sleep(120);
+        }
+        shoot = true;
+        telemetry.addLine("Shoot sequence done!");
+        returnTrayToIntakeSlot0();
+    }
+
+    private boolean allSlotsLoaded() {
+        return slots[0] != null && slots[1] != null && slots[2] != null;
+    }
 
     private void telemetryUpdateThrottled() {
         long now = System.currentTimeMillis();
