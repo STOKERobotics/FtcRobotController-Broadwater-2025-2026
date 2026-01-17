@@ -10,14 +10,11 @@ import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
 import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
-import org.firstinspires.ftc.robotcore.external.navigation.Orientation;
 
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
-import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.DigitalChannel;
 import com.qualcomm.robotcore.hardware.Servo;
@@ -34,7 +31,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 import java.util.List;
 
 @Autonomous(name = "Broadwater Auto: 1m + Turn35 + SpinUp")
-public class broadwater_robotics_25_26_auto extends LinearOpMode {
+public class broadwater_robotics_25_26_auto_RED extends LinearOpMode {
 
     private DcMotor motor0; // Drive FR
     private DcMotor motor1; // Drive BL
@@ -288,7 +285,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         // ---- Drive backward 0.5 meter ----
         //driveForwardMeters(0.5, -0.4);
         telemetry.update();// ---- Turn right 35 degrees ----
-        turnRightDegrees(15.0, 0.25);
+        turnDegrees(-15.0, 0.25);
         telemetry.update();
 
 
@@ -1222,11 +1219,16 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     private static double clip(double v, double lo, double hi) {
         return Math.max(lo, Math.min(hi, v));
     }
-    // ---------------- Movement: Turn right (IMU) ----------------
-    // ---------------- Movement: Turn right (IMU) ----------------
-    private void turnRightDegrees(double degrees, double maxPower) {
-        double startYaw = getYawDeg();
-        double targetYaw = angleWrapDeg(startYaw - degrees); // right turn typically decreases yaw
+    // ---------------- Movement: Turn (IMU) ----------------
+    /**
+     * Turn robot by signed degrees using IMU.
+     *  +degrees = LEFT turn (CCW)
+     *  -degrees = RIGHT turn (CW)
+     */
+    private void turnDegrees(double degrees, double maxPower) {
+
+        double startYaw  = getYawDeg();
+        double targetYaw = angleWrapDeg(startYaw + degrees);
 
         final double TOL_DEG = 2.0;
         final double MIN_OUT = 0.10;
@@ -1234,30 +1236,37 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         final long   TIMEOUT = 4000;
 
         double pMax = clip(Math.abs(maxPower), 0.0, 1.0);
-
         double gain = (gamepad1.left_bumper) ? 1.0 : 0.5;
 
         long startMs = System.currentTimeMillis();
         while (opModeIsActive() && (System.currentTimeMillis() - startMs) < TIMEOUT) {
+
             double yaw = getYawDeg();
             double err = angleWrapDeg(targetYaw - yaw);
 
-            telemetry.addData("Turn", "start=%.1f target=%.1f yaw=%.1f err=%.1f",
+            telemetry.addData("Turn",
+                    "start=%.1f target=%.1f yaw=%.1f err=%.1f",
                     startYaw, targetYaw, yaw, err);
             telemetryUpdateThrottled();
 
             if (Math.abs(err) <= TOL_DEG) break;
 
+            // Proportional control
             double out = err * KP;
             out = clip(out, -pMax, pMax);
 
-            if (Math.abs(out) < MIN_OUT) out = MIN_OUT * Math.signum(out);
-            if (Math.abs(err) < 10.0) out = clip(out, -0.18, 0.18);
+            // Minimum turn output to overcome static friction
+            if (Math.abs(out) < MIN_OUT)
+                out = MIN_OUT * Math.signum(out);
 
-            // Convert desired final rotate to stick (pre-gain)
+            // Slow down near target
+            if (Math.abs(err) < 10.0)
+                out = clip(out, -0.18, 0.18);
+
+            // Convert desired rotate to stick (pre-gain)
             double stickLSX = clip(out / gain, -1.0, 1.0);
 
-            // Pure mecanum rotation (no drive/strafe)
+            // Pure rotation
             LSY = 0f;
             RSX = 0f;
             LSX = (float) stickLSX;
@@ -1266,11 +1275,15 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
             idle();
         }
 
-        LSY = 0f; LSX = 0f; RSX = 0f;
+        // Stop cleanly
+        LSY = 0f;
+        LSX = 0f;
+        RSX = 0f;
         sticks2();
         stopDrive();
         sleep(120);
     }
+
 
 
 }
