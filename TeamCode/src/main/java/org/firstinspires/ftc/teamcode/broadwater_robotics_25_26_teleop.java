@@ -189,6 +189,12 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private boolean wasButtonBPressed = false;
     private Limelight3A limelight;
     String[] slots = new String[3];
+    // ---------------- Shooter RPM balancing ----------------
+    private static final double SHOOTER_BAL_KP = 0.00025; // tune: start 0.00015..0.00040
+    private static final double SHOOTER_BAL_MAX_ADJ = 0.12; // max +/- added to base power
+    private static final double SHOOTER_MIN_ACTIVE_POWER = 0.08; // don't balance below this
+
+    private double shooterBasePower = 0.60; // "set power" you want (update this when you change power)
 
     @Override
     public void runOpMode() {
@@ -281,24 +287,17 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         mag2.setMode(DigitalChannel.Mode.INPUT);
         mag3.setMode(DigitalChannel.Mode.INPUT);
 
-        motor0b.setPower(.6);
-        motor1b.setPower(.6);
-
-
-
         waitForStart();
 
         if (opModeIsActive()) {
+            shooterBasePower = 0.60;
+
+            motor2b.setPower(1);
             while (opModeIsActive()) {
                 telemetry.clear();
                 updateDriveEStop();
 
                 lights();
-                if (motor0b.getPower() <=0){
-                    motor0b.setPower(0.1);
-                    motor1b.setPower(0.1);
-                }
-
 
                 if (alignActive) {
                     telemetryLimeLight();  // only when aligning
@@ -309,7 +308,6 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                     txFiltered = 0.0;
                     alignStableStarted = false;
                 }
-
 
                 // Cancel align: Controller 2 circle (gamepad2.b)
                 if (gamepad2.b && alignActive) {
@@ -346,7 +344,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                     telemetryBallColor();
                 }
 
-                motor2b.setPower(1);
+
 
                 double v = laser.getVoltage();        // 0.0 to ~3.3V
                 double mm = (v / 3.3) * 1000.0;       // 0–1000mm mapped to 0–3.3V
@@ -366,6 +364,54 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 telemetryUpdateThrottled();
             }
         }
+    }
+
+    /**
+     * Balances motor0b and motor1b RPM while keeping the average near basePower.
+     * Call every loop while shooter is running.
+     */
+    private void balanceShooterRPM(double basePower) {
+        // If shooter is basically off, just set equal power and exit
+        if (Math.abs(basePower) < SHOOTER_MIN_ACTIVE_POWER) {
+            motor0b.setPower(basePower);
+            motor1b.setPower(basePower);
+            return;
+        }
+
+        // Encoder velocity (ticks/sec). Use abs so direction/reverse doesn't matter.
+        double v0 = Math.abs(((DcMotorEx) motor0b).getVelocity());
+        double v1 = Math.abs(((DcMotorEx) motor1b).getVelocity());
+
+        // If one reads 0 (unplugged encoder, not ready yet), don't do math that will slam power
+        if (v0 < 1 || v1 < 1) {
+            motor0b.setPower(basePower);
+            motor1b.setPower(basePower);
+            return;
+        }
+
+        // Error: positive means motor0b is faster than motor1b
+        double error = v0 - v1;
+
+        // Correction in "power units"
+        double adj = error * SHOOTER_BAL_KP;
+
+        // Clamp correction
+        adj = Math.max(-SHOOTER_BAL_MAX_ADJ, Math.min(SHOOTER_BAL_MAX_ADJ, adj));
+
+        // Apply: slow down the fast one, speed up the slow one
+        double p0 = basePower - adj;
+        double p1 = basePower + adj;
+
+        // Clamp final motor powers
+        p0 = Math.max(-1.0, Math.min(1.0, p0));
+        p1 = Math.max(-1.0, Math.min(1.0, p1));
+
+        motor0b.setPower(p0);
+        motor1b.setPower(p1);
+
+        telemetry.addData("ShooterBal",
+                "base=%.2f v0=%.0f v1=%.0f err=%.0f adj=%.3f p0=%.2f p1=%.2f",
+                basePower, v0, v1, error, adj, p0, p1);
     }
 
     private void initLimelight() {
@@ -1193,12 +1239,15 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
             servo2Pos -= SERVO2_RATE * dt;
         }
         if (gamepad2.dpadRightWasPressed()) {
-            motor0b.setPower(motor0b.getPower() + .1);
-            motor1b.setPower(motor1b.getPower() + .1);
+            shooterBasePower += 0.1;
+//            motor0b.setPower(motor0b.getPower() + .1);
+//            motor1b.setPower(motor1b.getPower() + .1);
         }
         if (gamepad2.dpadLeftWasPressed()) {
-            motor0b.setPower(motor0b.getPower() - .1);
-            motor1b.setPower(motor1b.getPower() - .1);
+            shooterBasePower -= 0.1;
+
+//            motor0b.setPower(motor0b.getPower() - .1);
+//            motor1b.setPower(motor1b.getPower() - .1);
         }
 
 
