@@ -288,6 +288,8 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         }
 
             alignToTarget();
+        sleep(5000);
+        sleep(5000);
         // (Optional) keep running shooter/intake, or stop them:
         // motor0b.setPower(0);
         // motor1b.setPower(0);
