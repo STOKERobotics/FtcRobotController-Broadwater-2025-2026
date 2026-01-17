@@ -287,7 +287,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         while (opModeIsActive() && intakeState != INTAKEState.DONE) {
             telemetryUpdateThrottled();
             updateBallColor();
-//            merryGoRoundIntake();
+            merryGoRoundIntake();
             telemetryBallColor();
 
 //            telemetry.update(); // flush to Driver Station
