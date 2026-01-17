@@ -368,6 +368,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 double inches = mm / 25.4;
                 boolean m2 = !mag2.getState(); // true = magnet ON
                 boolean m3 = !mag3.getState(); // true = magnet ON
+                telemetry.addData("intakeSate", intakeState);
                 telemetry.addData("SHOOT RAW", "m2=%s m3=%s", m2, m3);
                 telemetry.addData("ShootSlot()", getCurrentShootSlot());
                 telemetry.addData("Laser Dist", "%.0f mm  (%.1f in)", mm, inches);
