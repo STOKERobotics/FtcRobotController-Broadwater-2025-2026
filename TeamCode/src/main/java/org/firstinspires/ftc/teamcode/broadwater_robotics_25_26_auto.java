@@ -1021,7 +1021,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
         // Convert meters -> ticks (your constants must exist)
         int ticksTarget = (int) Math.round((Math.abs(meters) / WHEEL_CIRCUMFERENCE_M) * TICKS_PER_WHEEL_REV);
-        int direction = (meters >= 0) ? +1 : -1; // +forward, -backward
+        int direction = (meters >= 0) ? -1 : +1; // +forward, -backward
 
         int startFR = motor0.getCurrentPosition();
         int startBL = motor1.getCurrentPosition();
