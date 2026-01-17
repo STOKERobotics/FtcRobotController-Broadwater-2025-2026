@@ -118,7 +118,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private NormalizedColorSensor ballColor;
 
     private String ballColorValue;
-    private double servo2Pos = 0.5;                 // start midpoint (change if you want)
+    private double servo2Pos = 0.65;                 // start midpoint (change if you want)
     private static final double SERVO2_MIN = 0.0;
     private static final double SERVO2_MAX = 1.0;
     private static final double SERVO2_RATE = 0.6;
@@ -497,7 +497,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         }
 
         // --- Turn only (robot-centric) ---
-        double turn = tx * ALIGN_KP;   // flip sign if turns wrong way
+        double turn = -tx * ALIGN_KP;   // flip sign if turns wrong way
         turn = Math.max(-ALIGN_MAX_POWER, Math.min(ALIGN_MAX_POWER, turn));
 
         driveRobotCentric(0, 0, turn);
@@ -596,7 +596,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         }
 
         telemetry.addLine("Shoot sequence done!");
-        returnTrayToIntakeSlot0();
+        //returnTrayToIntakeSlot0();
     }
 
     private boolean atShootSlot(int slot) {
