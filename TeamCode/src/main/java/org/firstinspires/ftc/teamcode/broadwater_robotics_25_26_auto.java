@@ -168,6 +168,8 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
     String[] slots = new String[3];
     private boolean shoot = false;
     private boolean align = false;
+    private static final double CAMERA_X_OFFSET_IN = 5.0;   // camera is 5 inches LEFT
+    private static final double IN_TO_M = 0.0254;
     @Override
     public void runOpMode() {
         initLimelight();
@@ -487,7 +489,14 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
         double x = pose.getPosition().x; // meters (left/right)
         double z = pose.getPosition().z; // meters (forward)
-        double tx = Math.toDegrees(Math.atan2(x, z));
+        double xCam = pose.getPosition().x; // meters (camera space, +left)
+        double zCam = pose.getPosition().z; // meters forward
+
+        // Correct for camera being offset LEFT of robot center
+        double xCorrected = xCam + CAMERA_X_OFFSET_IN * IN_TO_M;
+
+        // Compute yaw error using corrected x
+        double tx = Math.toDegrees(Math.atan2(xCorrected, zCam));
 
         telemetry.addData("ALIGN",
                 "tag=%d tx=%.2f x=%.2f z=%.2f",
