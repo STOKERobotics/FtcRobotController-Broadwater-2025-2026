@@ -262,17 +262,17 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         motor1b.setPower(.6);
 
         waitForStart();
-        if (opModeIsActive()) {
-            while (opModeIsActive()) {
-                // ---- Drive forward 1 meter ----
-                driveForwardMeters(1.0, -0.6);
-                telemetryLimeLight();
-                motifLatched = false;
-                latchedMotif = "NONE";
-                latchedTagId = -1;
-                updateMotifListener();
-            }
-        }
+        if (!opModeIsActive()) return;
+
+        motifListenEnabled = true;     // auto must enable it
+        motifLatched = false;
+        driveForwardMeters(1.0, -0.6);
+        telemetryLimeLight();
+        motifLatched = false;
+        latchedMotif = "NONE";
+        latchedTagId = -1;
+        updateMotifListener();
+
         // ---- Drive backward 0.5 meter ----
         //driveForwardMeters(0.5, -0.4);
 
@@ -283,9 +283,6 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         // motor0b.setPower(0);
         // motor1b.setPower(0);
         // motor2b.setPower(0);
-
-
-        stopDrive();
     }
 
     // ---------------- Init ----------------
