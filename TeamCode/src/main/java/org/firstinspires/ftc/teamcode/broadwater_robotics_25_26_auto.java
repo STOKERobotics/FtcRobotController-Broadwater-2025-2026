@@ -257,16 +257,16 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         mag2.setMode(DigitalChannel.Mode.INPUT);
         mag3.setMode(DigitalChannel.Mode.INPUT);
 
-        motor0b.setPower(.6);
-        motor1b.setPower(.6);
+
 
         waitForStart();
         if (!opModeIsActive()) return;
-
+        motor0b.setPower(.7);
+        motor1b.setPower(.7);
         motifListenEnabled = true;     // auto must enable it
         motifLatched = false;
         driveForwardMeters(0.1, -0.6);
-        telemetryLimeLight();
+//        telemetryLimeLight();
         motifLatched = false;
         latchedMotif = "NONE";
         latchedTagId = -1;
@@ -298,14 +298,6 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         while (opModeIsActive() && !shoot){
             adjustShooterAndFire();
         }
-
-        sleep(5000);
-        sleep(5000);
-
-        // (Optional) keep running shooter/intake, or stop them:
-        // motor0b.setPower(0);
-        // motor1b.setPower(0);
-        // motor2b.setPower(0);
     }
 
     // ---------------- Init ----------------
