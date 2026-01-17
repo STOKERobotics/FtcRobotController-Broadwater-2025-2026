@@ -284,7 +284,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         sleep(5000);
         sleep(5000);
         // ---- Turn right 35 degrees ----
-        turnRightDegrees(5.0, 0.25);
+        turnRightDegrees(15.0, 0.25);
         sleep(5000);
         sleep(5000);
 
