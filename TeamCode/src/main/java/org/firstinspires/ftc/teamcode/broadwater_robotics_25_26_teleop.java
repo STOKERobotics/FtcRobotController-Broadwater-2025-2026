@@ -118,7 +118,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private NormalizedColorSensor ballColor;
 
     private String ballColorValue;
-    private double servo2Pos = 0.65;                 // start midpoint (change if you want)
+    private double servo2Pos = 0.625;                 // start midpoint (change if you want)
     private static final double SERVO2_MIN = 0.0;
     private static final double SERVO2_MAX = 1.0;
     private static final double SERVO2_RATE = 0.6;
@@ -561,8 +561,8 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         double normalized = Math.max(0, Math.min(1,
                 (distanceInches - SHOOTER_MIN_DIST) / (SHOOTER_MAX_DIST - SHOOTER_MIN_DIST)));
 
-        double servoAngle = .65;
-        servo2.setPosition(servoAngle);
+        double servoAngle = SERVO_MAX_ANGLE - (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) * normalized;
+        servo2.setPosition(.65);
 
         telemetry.addData("Motif", latchedMotif);
         telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
@@ -1091,9 +1091,10 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         sleep(KICK_DURATION_MS);
         servo0.setPosition(KICK_RETRACT_POS);
     }
-
+    private static final long KICK_RETRACT_WAIT_MS = 250; // tune 150-400ms
     private void ensureKickerRetracted() {
         servo0.setPosition(KICK_RETRACT_POS);
+        sleep(KICK_RETRACT_WAIT_MS);
     }
 
     private boolean wasStepShootPressed = false;
