@@ -735,7 +735,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
 
             // Reset intake state machine so it is READY to accept balls
             currentSlot = 0;
-            intakeState = broadwater_robotics_25_26_teleop.INTAKEState.WAIT_COLOR_0;
+            intakeState = INTAKEState.WAIT_COLOR_0;
             colorLatched = false;
 
         } finally {
@@ -747,12 +747,12 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
         return (current + INTAKE_SLOT_STEP + 3) % 3;
     }
 
-    private broadwater_robotics_25_26_teleop.INTAKEState waitStateForSlot(int slot) {
+    private INTAKEState waitStateForSlot(int slot) {
         switch (slot) {
-            case 0: return broadwater_robotics_25_26_teleop.INTAKEState.WAIT_COLOR_0;
-            case 1: return broadwater_robotics_25_26_teleop.INTAKEState.WAIT_COLOR_1;
-            case 2: return broadwater_robotics_25_26_teleop.INTAKEState.WAIT_COLOR_2;
-            default: return broadwater_robotics_25_26_teleop.INTAKEState.WAIT_COLOR_0;
+            case 0: return INTAKEState.WAIT_COLOR_0;
+            case 1: return INTAKEState.WAIT_COLOR_1;
+            case 2: return INTAKEState.WAIT_COLOR_2;
+            default: return INTAKEState.WAIT_COLOR_0;
         }
     }
     private void merryGoRoundIntake() {
@@ -807,7 +807,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
                 if (atSlot0()) {
                     servo1.setPower(0);
                     currentSlot = 0;
-                    intakeState = broadwater_robotics_25_26_teleop.INTAKEState.WAIT_COLOR_0;
+                    intakeState = INTAKEState.WAIT_COLOR_0;
                     colorLatched = false;
                 }
                 break;
@@ -816,7 +816,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
                 servo1.setPower(0);
                 if (newColorEvent) {
                     assignSlot(0);
-                    intakeState = broadwater_robotics_25_26_teleop.INTAKEState.MOVE_TO_SLOT1;
+                    intakeState = INTAKEState.MOVE_TO_SLOT1;
                 }
                 break;
 
@@ -826,7 +826,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
                 if (atSlot1()) {
                     servo1.setPower(0);
                     currentSlot = 1;
-                    intakeState = broadwater_robotics_25_26_teleop.INTAKEState.WAIT_COLOR_1;
+                    intakeState =INTAKEState.WAIT_COLOR_1;
                     colorLatched = false;
                 }
                 break;
@@ -835,7 +835,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
                 servo1.setPower(0);
                 if (newColorEvent) {
                     assignSlot(1);
-                    intakeState = broadwater_robotics_25_26_teleop.INTAKEState.MOVE_TO_SLOT2;
+                    intakeState =INTAKEState.MOVE_TO_SLOT2;
                 }
                 break;
 
@@ -845,7 +845,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
                 if (atSlot2()) {
                     servo1.setPower(0);
                     currentSlot = 2;
-                    intakeState = broadwater_robotics_25_26_teleop.INTAKEState.WAIT_COLOR_2;
+                    intakeState =INTAKEState.WAIT_COLOR_2;
                     colorLatched = false;
                 }
                 break;
@@ -854,7 +854,7 @@ public class broadwater_robotics_25_26_auto extends LinearOpMode {
                 servo1.setPower(0);
                 if (newColorEvent) {
                     assignSlot(2);
-                    intakeState = broadwater_robotics_25_26_teleop.INTAKEState.DONE;
+                    intakeState = INTAKEState.DONE;
                 }
                 break;
 
