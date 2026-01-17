@@ -561,7 +561,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         double normalized = Math.max(0, Math.min(1,
                 (distanceInches - SHOOTER_MIN_DIST) / (SHOOTER_MAX_DIST - SHOOTER_MIN_DIST)));
 
-        double servoAngle = SERVO_MAX_ANGLE - (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) * normalized;
+        double servoAngle = .65;
         servo2.setPosition(servoAngle);
 
         telemetry.addData("Motif", latchedMotif);
