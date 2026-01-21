@@ -91,7 +91,7 @@ public class broadwater_robotics_25_26_auto_BLUE extends LinearOpMode {
     private NormalizedColorSensor ballColor;
 
     private String ballColorValue;
-    private double servo2Pos = 0.65;                 // start midpoint (change if you want)
+    private double servo2Pos = 0.7;                 // start midpoint (change if you want)
     private static final double SERVO2_MIN = 0.0;
     private static final double SERVO2_MAX = 1.0;
     private static final double SERVO2_RATE = 0.6;
@@ -256,8 +256,10 @@ public class broadwater_robotics_25_26_auto_BLUE extends LinearOpMode {
 
         waitForStart();
         if (!opModeIsActive()) return;
-        motor0b.setPower(.75);
-        motor1b.setPower(.75);
+        motor0b.setPower(.695);
+        motor1b.setPower(.695);
+        motor2b.setPower(1);
+
         motifListenEnabled = true;     // auto must enable it
         motifLatched = false;
         driveForwardMeters(0.1, -0.6);
@@ -744,7 +746,7 @@ public class broadwater_robotics_25_26_auto_BLUE extends LinearOpMode {
 
         if(confident && (hue >= 120 && hue <= 180)) {
             ballColorValue = "g";
-        } else if(confident && (hue >= 210 && hue <= 255)) {
+        } else if (confident && (hue >= 210 && hue <= 255)) {
             ballColorValue = "p";
         } else {
             ballColorValue = null;

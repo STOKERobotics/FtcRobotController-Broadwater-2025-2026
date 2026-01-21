@@ -93,7 +93,7 @@ public class broadwater_robotics_25_26_auto_RED extends LinearOpMode {
     private NormalizedColorSensor ballColor;
 
     private String ballColorValue;
-    private double servo2Pos = 0.65;                 // start midpoint (change if you want)
+    private double servo2Pos = 0.7;                 // start midpoint (change if you want)
     private static final double SERVO2_MIN = 0.0;
     private static final double SERVO2_MAX = 1.0;
     private static final double SERVO2_RATE = 0.6;
@@ -259,8 +259,10 @@ public class broadwater_robotics_25_26_auto_RED extends LinearOpMode {
 
         waitForStart();
         if (!opModeIsActive()) return;
-        motor0b.setPower(.75);
-        motor1b.setPower(.75);
+        motor0b.setPower(.695);
+        motor1b.setPower(.695);
+        motor2b.setPower(1);
+
         motifListenEnabled = true;     // auto must enable it
         motifLatched = false;
         driveForwardMeters(0.1, -0.6);
@@ -275,6 +277,7 @@ public class broadwater_robotics_25_26_auto_RED extends LinearOpMode {
             telemetry.addData("Latched Motif", "%s (Tag %d)", latchedMotif, latchedTagId);
             telemetryUpdateThrottled();
         }
+
         while (opModeIsActive() && intakeState != INTAKEState.DONE) {
             telemetryUpdateThrottled();
             updateBallColor();

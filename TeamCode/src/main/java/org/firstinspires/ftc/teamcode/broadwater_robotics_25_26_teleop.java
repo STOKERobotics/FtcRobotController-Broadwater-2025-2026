@@ -149,7 +149,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private final boolean[] slotFired = new boolean[3];
 
     // Adjust if servo direction is backwards
-    private static final double MGR_FAST_POWER   = 0.25;   // your main spin
+    private static final double MGR_FAST_POWER   = .8;   // your main spin
     private static final double MGR_CRAWL_POWER  = 0.1;  // slow approach
     private static final long   MGR_BRAKE_MS     = 0;    // short reverse tap
     private static final double MGR_BRAKE_POWER  = -0.30; // brake tap power
@@ -314,12 +314,25 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         if (opModeIsActive()) {
 //            shooterBasePower = 0.70;
 //            shooterTargetRPM = 3000;
-            motor0b.setPower(0.7);
-            motor1b.setPower(0.7);
+
+            motor0b.setPower(0.6);
+            motor1b.setPower(0.6);
             motor2b.setPower(1);
             while (opModeIsActive()) {
 //                setShooterRPM(shooterTargetRPM);
 //                balanceShooterRPM(shooterBasePower);
+                if (mag1.getState()){
+                    telemetry.addData("mag0",mag0.getState());}
+                else telemetry.addData("nada", mag0.getState());
+                if (mag1.getState()){
+                    telemetry.addData("mag1",mag1.getState());}
+                else telemetry.addData("nada", mag1.getState());
+                if (mag2.getState()){
+                    telemetry.addData("mag2",mag2.getState());}
+                else telemetry.addData("nada", mag2.getState());
+                if (mag3.getState()){
+                    telemetry.addData("mag3",mag3.getState());}
+                else telemetry.addData("nada", mag3.getState());
                 telemetry.clear();
 
                 lights();
@@ -692,7 +705,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 (distanceInches - SHOOTER_MIN_DIST) / (SHOOTER_MAX_DIST - SHOOTER_MIN_DIST)));
 
         double servoAngle = SERVO_MAX_ANGLE - (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) * normalized;
-        servo2.setPosition(.65);
+        servo2.setPosition(.758);
 
         telemetry.addData("Motif", latchedMotif);
         telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
@@ -839,11 +852,11 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
             // If we are already sitting in the target slot window, force a REAL leave first
             if (atShootSlot(targetSlot)) {
-                servo1.setPower(MGR_CRAWL_POWER);
                 long leaveStart = System.currentTimeMillis();
+                servo1.setPower(MGR_CRAWL_POWER);
                 while (opModeIsActive()
                         && !notAtShootSlotStable(targetSlot, LEAVE_STABLE_MS)
-                        && (System.currentTimeMillis() - leaveStart) < 600) {
+                        && (System.currentTimeMillis() - leaveStart) < 400) {
                     idle();
                 }
                 servo1.setPower(0);
@@ -858,9 +871,8 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 // First: did we hit the target slot window?
                 if (atShootSlot(targetSlot)) {
                     // Second: is it stable (not just a 1-frame flicker)?
-                    if (atShootSlotStable(targetSlot, SLOT_STABLE_MS)) {
-                        break; // we are really there
-                    }
+                    break; // we are really there
+
                 }
                 idle();
             }
@@ -1219,10 +1231,12 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 servo1.setPower(0);
                 break;
         }
-
+        telemetry.addData("Shooter 0 power", motor0b.getPower());
+        telemetry.addData("Shooter 1 power", motor1b.getPower());
         telemetry.addData("Intake State", intakeState);
         //telemetry.addData("BallColor", ballColorValue);
         telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
+
     }
 
     private void kickOnce() {
@@ -1401,8 +1415,8 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 
     private void sticks2() {
         double gain;
-        if (gamepad1.left_bumper) gain = 1;
-        else gain = 0.5;
+        if (gamepad1.left_bumper) gain = 0.5;
+        else gain = 1;
 
         drivePower  = gain * LSY;      // forward/back
         rotatePower = gain * LSX;      // turn
