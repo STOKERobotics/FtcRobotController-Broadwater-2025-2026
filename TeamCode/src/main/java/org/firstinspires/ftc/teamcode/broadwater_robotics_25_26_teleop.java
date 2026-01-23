@@ -29,28 +29,27 @@
 
 package org.firstinspires.ftc.teamcode;
 
+import android.graphics.Color;
+
 import com.qualcomm.hardware.bosch.BNO055IMU;
 import com.qualcomm.hardware.bosch.BNO055IMU.Parameters;
 import com.qualcomm.hardware.limelightvision.LLResult;
-import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
+import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
-import org.firstinspires.ftc.robotcore.external.navigation.Orientation;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.AnalogInput;
 import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.DigitalChannel;
-import com.qualcomm.robotcore.hardware.Servo;
-
 import com.qualcomm.robotcore.hardware.NormalizedColorSensor;
 import com.qualcomm.robotcore.hardware.NormalizedRGBA;
+import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.SwitchableLight;
-import com.qualcomm.robotcore.hardware.AnalogInput;
 
-import android.graphics.Color;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 
 import java.util.List;
@@ -68,10 +67,10 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private Servo servo0; // Kicker
     private CRServo servo1; // Merry Go Round Tray
     private Servo servo2; // Shooter Angle
-    private BNO055IMU imu1;
+    private BNO055IMU imu2;
+    public BNO055IMU imu1;
     private DigitalChannel blueLED;
     private DigitalChannel redLED;
-    private AnalogInput laser;
     private DigitalChannel mag0; // Intake Magnet 0
     private DigitalChannel mag1; // Intake Magnet 1
     private DigitalChannel mag2; // Shooter Magnet 2
@@ -134,7 +133,6 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private static final long LEAVE_STABLE_MS = 20; // shorter is fine
 
 
-
     // Merry-go-round state machine
     enum INTAKEState { INIT_TO_SLOT0, WAIT_COLOR_0, MOVE_TO_SLOT1, WAIT_COLOR_1, MOVE_TO_SLOT2, WAIT_COLOR_2, DONE }
     private INTAKEState intakeState = INTAKEState.INIT_TO_SLOT0;
@@ -149,8 +147,8 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     private final boolean[] slotFired = new boolean[3];
 
     // Adjust if servo direction is backwards
-    private static final double MGR_FAST_POWER   = .8;   // your main spin
-    private static final double MGR_CRAWL_POWER  = 0.1;  // slow approach
+    private static final double MGR_FAST_POWER   = .3;   // your main spin
+    private static final double MGR_CRAWL_POWER  = 0.05;  // slow approach
     private static final long   MGR_BRAKE_MS     = 0;    // short reverse tap
     private static final double MGR_BRAKE_POWER  = -0.30; // brake tap power
     private static final double MGR_BACKUP_POWER   = -0;  // stronger than -0.10
@@ -222,6 +220,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
     public void runOpMode() {
         initLimelight();
 
+
         telemetry.addData("DS preview on/off", "3 dots, Camera Stream");
         telemetry.addData(">", "Touch START to start OpMode");
 
@@ -235,10 +234,12 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         servo0 = hardwareMap.get(Servo.class, "servo0");
         servo1 = hardwareMap.get(CRServo.class, "servo1");
         servo2 = hardwareMap.get(Servo.class, "servo2");
-        laser = hardwareMap.get(AnalogInput.class, "laser");
+        AnalogInput laser = hardwareMap.get(AnalogInput.class, "laser");
         servo2.setPosition(servo2Pos);
         lastServo2Time = getRuntime();
-        imu1 = hardwareMap.get(BNO055IMU.class, "imu 1");
+
+        BNO055IMU imu1 = hardwareMap.get(BNO055IMU.class, "imu 1");
+        BNO055IMU imu2 = hardwareMap.get(BNO055IMU.class, "imu2");
         ballColor = hardwareMap.get(NormalizedColorSensor.class, "ballColor"); // match config name
 
         mag0 = hardwareMap.get(DigitalChannel.class, "mag0");
@@ -285,7 +286,7 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         motor2b.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
         servo0.setPosition(KICK_RETRACT_POS);
-        servo1.setDirection(DcMotorSimple.Direction.REVERSE);
+        servo1.setDirection(DcMotorSimple.Direction.FORWARD);
 
         RevHubOrientationOnRobot orientation =
                 new RevHubOrientationOnRobot(
@@ -298,6 +299,12 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
         imuParameters.accelUnit = BNO055IMU.AccelUnit.METERS_PERSEC_PERSEC;
         imuParameters.loggingEnabled = false;
         imu1.initialize(imuParameters);
+        Parameters imuParameters2 = new Parameters();
+        imuParameters2.angleUnit = BNO055IMU.AngleUnit.DEGREES;
+        imuParameters2.accelUnit = BNO055IMU.AccelUnit.METERS_PERSEC_PERSEC;
+        imuParameters2.loggingEnabled = true;
+
+        imu2.initialize(imuParameters2);
 
 
         if (ballColor instanceof SwitchableLight) {
@@ -336,6 +343,8 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 telemetry.clear();
 
                 lights();
+
+
 
                 if (alignActive) {
                     telemetryLimeLight();  // only when aligning
@@ -391,12 +400,14 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
                 telemetry.addData("Motif Listener", motifListenEnabled ? "ON" : "OFF");
                 telemetry.addData("Latched Motif", "%s (Tag %d)", latchedMotif, latchedTagId);
 
-
+                imu();
 
                 telemetryUpdateThrottled();
             }
         }
     }
+
+
 
 
     private double ticksPerSecondToRPM(double ticksPerSec) {
@@ -539,6 +550,13 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
             lastTelemMs = now;
         }
 
+    }
+
+    private void imu(){
+        telemetry.addData("ugadsh" , imu2.getAngularOrientation());
+
+
+        telemetry.update();
     }
 
     private void telemetryLimeLight() {
@@ -1350,9 +1368,6 @@ public class broadwater_robotics_25_26_teleop extends LinearOpMode {
 //        shooterTargetRPM = Math.max(0, shooterTargetRPM);
 
         if (gamepad2.dpadRightWasPressed()) {
-//            shooterBasePower += 0.1;
-
-
             motor0b.setPower(motor0b.getPower() + .1);
             motor1b.setPower(motor1b.getPower() + .1);
         }
