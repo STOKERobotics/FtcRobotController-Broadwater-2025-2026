@@ -32,7 +32,7 @@ import java.util.List;
  * This base class contains all common robot hardware, constants, and methods.
  * Changes here automatically propagate to both TeleOp and Autonomous modes.
  */
-public abstract class BroadwaterRobotBase extends LinearOpMode {
+public abstract class BroadwaterRoboticsBase extends LinearOpMode {
 
     // ==================== HARDWARE ====================
     protected DcMotor motor0, motor1, motor2, motor3;           // Drive motors

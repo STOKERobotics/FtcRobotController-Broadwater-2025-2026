@@ -5,7 +5,7 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
 @Autonomous(name = "Broadwater Auto Blue (Linked)")
-public class broadwater_robotics_25_26_auto_BLUE extends BroadwaterRobotBase {
+public class broadwater_robotics_25_26_auto_BLUE extends BroadwaterRoboticsBase {
 
     // ==================== AUTONOMOUS-SPECIFIC STATE ====================
     private boolean shoot = false;

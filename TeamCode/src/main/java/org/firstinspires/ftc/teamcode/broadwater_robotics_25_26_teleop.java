@@ -4,7 +4,7 @@ import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 @TeleOp(name = "Broadwater Robotics TeleOp (Linked)")
-public class broadwater_robotics_25_26_teleop    extends BroadwaterRobotBase {
+public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase {
 
     // ==================== TELEOP-SPECIFIC STATE ====================
     private boolean alignActive = false;
