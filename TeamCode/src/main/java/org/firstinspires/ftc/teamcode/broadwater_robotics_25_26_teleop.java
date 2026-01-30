@@ -33,8 +33,8 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
 
         if (opModeIsActive()) {
             // Start motors
-            motor0b.setPower(0.6);
-            motor1b.setPower(0.6);
+            motor0b.setPower(1);
+            motor1b.setPower(1);
             motor2b.setPower(1.0);
 
             // Main loop
@@ -149,11 +149,11 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
         servo2.setPosition(servo2Pos);
 
         // Shooter power adjustment
-        if (gamepad2.dpad_right) {
+        if (gamepad2.dpadRightWasPressed()) {
             motor0b.setPower(motor0b.getPower() + 0.1);
             motor1b.setPower(motor1b.getPower() + 0.1);
         }
-        if (gamepad2.dpad_left) {
+        if (gamepad2.dpadLeftWasPressed()) {
             motor0b.setPower(motor0b.getPower() - 0.1);
             motor1b.setPower(motor1b.getPower() - 0.1);
         }
@@ -272,5 +272,6 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
                 latchedMotif, latchedTagId, motifListenEnabled ? "LISTEN" : "");
         telemetry.addData("Shooter Pos", "%.3f", servo2.getPosition());
         telemetry.addData("Shooter Power", "%.2f / %.2f", motor0b.getPower(), motor1b.getPower());
+       // telemetry.addData("imu", imu2.getAngularOrientation());
     }
 }

@@ -11,7 +11,6 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.AnalogInput;
 import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.DigitalChannel;
 import com.qualcomm.robotcore.hardware.NormalizedColorSensor;
@@ -40,6 +39,7 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     protected Servo servo0, servo2;                              // Kicker, Shooter Angle
     protected CRServo servo1;                                    // Merry Go Round Tray
     protected BNO055IMU imu1;
+//    protected BNO055IMU imu2;
     protected DigitalChannel blueLED, redLED;
     protected DigitalChannel mag0, mag1, mag2, mag3;
     protected NormalizedColorSensor ballColor;
@@ -67,13 +67,13 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     protected static final double KICK_EXTEND_POS = 0.0;
     protected static final double KICK_RETRACT_POS = 1.0;
     protected static final long KICK_DURATION_MS = 1000;
-    protected static final long KICK_RETRACT_WAIT_MS = 250;
+    protected static final long KICK_RETRACT_WAIT_MS = 500;
 
     // Merry-go-round servo
-    protected static final double MGR_FAST_POWER = 0.4;
+    protected static final double MGR_FAST_POWER = 0.8;
     protected static final double MGR_CRAWL_POWER = 0.08;
-    protected static final long MGR_BRAKE_MS = 50;
-    protected static final double MGR_BRAKE_POWER = -0.40;
+    protected static final long MGR_BRAKE_MS = 100;
+    protected static final double MGR_BRAKE_POWER = -0.60;
     protected static final long MGR_MOVE_TIMEOUT_MS = 10000;
     protected static final int INTAKE_SLOT_STEP = 1;
     protected static final int SHOOT_SLOT_STEP = 1;
@@ -82,7 +82,7 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     // Servo2 (shooter angle)
     protected static final double SERVO2_MIN = 0.0;
     protected static final double SERVO2_MAX = 1.0;
-    protected static final double SERVO2_RATE = 0.6;
+    protected static final double SERVO2_RATE = 0.1;
 
     // Color sensor thresholds
     protected static final float COLOR_SAT_THRESHOLD = 0.05f;
@@ -127,7 +127,7 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     protected boolean stepModeActive = false;
 
     // Servo2 timing
-    protected double servo2Pos = 0.625;
+    protected double servo2Pos = .742;
     protected double lastServo2Time = 0.0;
 
     // LED states
@@ -161,7 +161,7 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
         servo1 = hardwareMap.get(CRServo.class, "servo1");
         servo2 = hardwareMap.get(Servo.class, "servo2");
         servo0.setPosition(KICK_RETRACT_POS);
-        servo1.setDirection(DcMotorSimple.Direction.FORWARD);
+        servo1.setDirection(DcMotorSimple.Direction.REVERSE);
         servo2.setPosition(servo2Pos);
         lastServo2Time = getRuntime();
 
@@ -186,7 +186,9 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
 
         // IMU
         imu1 = hardwareMap.get(BNO055IMU.class, "imu 1");
-        initIMU(imu1, false);
+        initIMU((BNO055IMU) imu1, false);
+//        imu2 = hardwareMap.get(BNO055IMU.class, "imu 2");
+//        initIMU(imu2, false);
     }
 
     protected DcMotor initMotor(String name, DcMotor.Direction direction) {
@@ -505,7 +507,7 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
         }
 
         // Set shooter angle
-        servo2.setPosition(0.758);
+        servo2.setPosition(servo2Pos);
 
         // Reset fired tracking
         for (int i = 0; i < 3; i++) slotFired[i] = false;
@@ -621,6 +623,12 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
                 AxesOrder.ZYX,
                 AngleUnit.DEGREES
         ).firstAngle;
+
+//        return imu2.getRobotOrientation(
+//                AxesReference.INTRINSIC,
+//                AxesOrder.ZYX,
+//                AngleUnit.DEGREES
+//        ).firstAngle;
     }
 
     protected static double angleWrapDeg(double deg) {
