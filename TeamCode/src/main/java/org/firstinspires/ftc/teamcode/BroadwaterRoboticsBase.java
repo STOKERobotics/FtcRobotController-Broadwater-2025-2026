@@ -39,7 +39,7 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     protected Servo servo0, servo2;                              // Kicker, Shooter Angle
     protected CRServo servo1;                                    // Merry Go Round Tray
     protected BNO055IMU imu1;
-//    protected BNO055IMU imu2;
+    //    protected BNO055IMU imu2;
     protected DigitalChannel blueLED, redLED;
     protected DigitalChannel mag0, mag1, mag2, mag3;
     protected NormalizedColorSensor ballColor;
@@ -127,7 +127,7 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     protected boolean stepModeActive = false;
 
     // Servo2 timing
-    protected double servo2Pos = .742;
+    protected double servo2Pos = 1;
     protected double lastServo2Time = 0.0;
 
     // LED states
@@ -300,12 +300,10 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
         sleep(KICK_RETRACT_WAIT_MS);
     }
 
-    // OPTIMIZATION: Unified rotation method for both intake and shoot
+    // OPTIMIZATION: Rotation method WITHOUT kicker retraction (caller handles timing)
     protected void rotateToSlotBlocking(int targetSlot, boolean useShootMagnets) {
         shootingBusy = true;
         try {
-            ensureKickerRetracted();
-
             // Check if already at target and leave if so
             boolean atTarget = useShootMagnets ? atShootSlot(targetSlot) : atIntakeSlot(targetSlot);
             if (atTarget) {
@@ -334,11 +332,28 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
 
             servo1.setPower(0);
 
+            // CRITICAL: Add settle time for shooter magnets to stabilize
+            if (useShootMagnets) {
+                sleep(30); // Brief settle for shooter detection
+                updateMagnetStates(); // Re-read after settle
+            }
+
             // Brake
+            updateMagnetStates();
+            atTarget = useShootMagnets ? atShootSlot(targetSlot) : atIntakeSlot(targetSlot);
             if (atTarget && MGR_BRAKE_MS > 0) {
                 servo1.setPower(MGR_BRAKE_POWER);
                 sleep(MGR_BRAKE_MS);
                 servo1.setPower(0);
+            }
+
+            // Log final position
+            updateMagnetStates();
+            int finalSlot = useShootMagnets ? getCurrentShootSlot() : getCurrentIntakeSlot();
+            if (finalSlot != targetSlot) {
+                telemetry.addData("ROTATION", "%s: wanted %d, got %d",
+                        useShootMagnets ? "SHOOTER" : "INTAKE", targetSlot, finalSlot);
+                telemetry.update();
             }
 
         } finally {
@@ -512,6 +527,9 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
         // Reset fired tracking
         for (int i = 0; i < 3; i++) slotFired[i] = false;
 
+        // Ensure kicker is retracted BEFORE we start
+        ensureKickerRetracted();
+
         // Fire sequence
         char[] order = latchedMotif.toCharArray();
         for (int shotIndex = 0; shotIndex < 3 && opModeIsActive(); shotIndex++) {
@@ -521,8 +539,14 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
             if (slotToShoot < 0) return;
 
             int shootFrameSlot = intakeSlotToShootSlot(slotToShoot);
+
+            // Rotate to position (kicker already retracted)
             rotateToSlotBlocking(shootFrameSlot, true);
-            kickOnce();
+
+            // Kick
+            kickOnce(); // This extends, waits, then retracts kicker
+
+            // Kicker is now retracted and ready for next rotation
 
             slotFired[slotToShoot] = true;
             slots[slotToShoot] = null;
@@ -601,7 +625,7 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
         double br = y + x - rx;
 
         double max = Math.max(1.0, Math.max(Math.abs(fl),
-                     Math.max(Math.abs(fr), Math.max(Math.abs(bl), Math.abs(br)))));
+                Math.max(Math.abs(fr), Math.max(Math.abs(bl), Math.abs(br)))));
 
         motor2.setPower(fl / max);
         motor0.setPower(fr / max);

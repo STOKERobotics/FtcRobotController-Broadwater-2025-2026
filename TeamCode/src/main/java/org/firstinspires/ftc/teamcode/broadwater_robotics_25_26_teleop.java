@@ -33,8 +33,8 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
 
         if (opModeIsActive()) {
             // Start motors
-            motor0b.setPower(1);
-            motor1b.setPower(1);
+//            motor0b.setPower(0.7);
+            motor1b.setPower(0.7);
             motor2b.setPower(1.0);
 
             // Main loop
@@ -140,23 +140,29 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
         double dt = clamp(now - lastServo2Time, 0, 0.1);
         lastServo2Time = now;
 
-        if (gamepad2.dpad_up) {
+        // ONLY update servo2 if dpad is pressed (manual control)
+        if (gamepad2.dpadUpWasPressed()) {
             servo2Pos += SERVO2_RATE * dt;
-        } else if (gamepad2.dpad_down) {
+            servo2Pos = clamp(servo2Pos, SERVO2_MIN, SERVO2_MAX);
+            servo2.setPosition(servo2Pos); // Update immediately
+        } else if (gamepad2.dpadDownWasPressed()) {
             servo2Pos -= SERVO2_RATE * dt;
+            servo2Pos = clamp(servo2Pos, SERVO2_MIN, SERVO2_MAX);
+            servo2.setPosition(servo2Pos); // Update immediately
         }
-        servo2Pos = clamp(servo2Pos, SERVO2_MIN, SERVO2_MAX);
-        servo2.setPosition(servo2Pos);
+        // NOTE: Removed "always update" behavior - only updates when dpad pressed
 
         // Shooter power adjustment
         if (gamepad2.dpadRightWasPressed()) {
-            motor0b.setPower(motor0b.getPower() + 0.1);
-            motor1b.setPower(motor1b.getPower() + 0.1);
+//            motor0b.setPower(motor0b.getPower() + 0.1);
+            motor1b.setPower(motor1b.getPower() + 0.05);
         }
         if (gamepad2.dpadLeftWasPressed()) {
-            motor0b.setPower(motor0b.getPower() - 0.1);
-            motor1b.setPower(motor1b.getPower() - 0.1);
+//            motor0b.setPower(motor0b.getPower() - 0.1);
+            motor1b.setPower(motor1b.getPower() - 0.05);
         }
+        if (motor1b.getPower() < 0.1)
+            motor1b.setPower(.15);
 
         // Motif listener toggle
         if (gamepad2.x && !wasMotifListenTogglePressed) {
@@ -192,7 +198,11 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
     }
 
     private void stepShootTrayOneSlotNoKick() {
-        if (shootingBusy) return;
+        if (shootingBusy) {
+            telemetry.addData("BLOCKED", "Shooting busy - wait for current action to finish");
+            telemetry.update();
+            return;
+        }
         ensureKickerRetracted();
 
         int current = getCurrentShootSlot();
@@ -203,10 +213,18 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
     }
 
     private void stepToNextSlotAndShoot() {
-        if (shootingBusy) return;
+        if (shootingBusy) {
+            telemetry.addData("BLOCKED", "Shooting busy - wait for current action to finish");
+            telemetry.update();
+            return;
+        }
         ensureKickerRetracted();
 
-        if (!motifReadyForStepShoot()) return;
+        if (!motifReadyForStepShoot()) {
+            telemetry.addData("NOT READY", "Need motif and balls loaded");
+            telemetry.update();
+            return;
+        }
 
         if (!stepModeActive || stepShotIndex >= 3) {
             resetStepShootSequence();
@@ -215,7 +233,11 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
         char wanted = Character.toLowerCase(latchedMotif.charAt(stepShotIndex));
         int slotToShoot = findSlotForColor(wanted);
 
-        if (slotToShoot < 0) return;
+        if (slotToShoot < 0) {
+            telemetry.addData("ERROR", "No ball found for color '%c'", wanted);
+            telemetry.update();
+            return;
+        }
 
         int shootFrameSlot = intakeSlotToShootSlot(slotToShoot);
         rotateToSlotBlocking(shootFrameSlot, true);
@@ -272,6 +294,6 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
                 latchedMotif, latchedTagId, motifListenEnabled ? "LISTEN" : "");
         telemetry.addData("Shooter Pos", "%.3f", servo2.getPosition());
         telemetry.addData("Shooter Power", "%.2f / %.2f", motor0b.getPower(), motor1b.getPower());
-       // telemetry.addData("imu", imu2.getAngularOrientation());
+        // telemetry.addData("imu", imu2.getAngularOrientation());
     }
 }
