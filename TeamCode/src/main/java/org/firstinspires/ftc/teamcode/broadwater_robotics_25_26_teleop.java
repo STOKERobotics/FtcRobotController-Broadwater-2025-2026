@@ -295,5 +295,11 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
         telemetry.addData("Shooter Pos", "%.3f", servo2.getPosition());
         telemetry.addData("Shooter Power", "%.2f / %.2f", motor0b.getPower(), motor1b.getPower());
         // telemetry.addData("imu", imu2.getAngularOrientation());
+
+        // Last kick timing (only show if a kick has occurred)
+        if (lastKickTotalMs > 0) {
+            telemetry.addData("Last Kick", "ext=%dms ret=%dms TOTAL=%dms",
+                    lastKickExtendMs, lastKickRetractMs, lastKickTotalMs);
+        }
     }
 }

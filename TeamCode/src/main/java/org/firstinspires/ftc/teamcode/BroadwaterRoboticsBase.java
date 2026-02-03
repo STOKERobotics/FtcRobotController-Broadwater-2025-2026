@@ -372,10 +372,47 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     }
 
     // ==================== SERVO CONTROL ====================
+    // Stores last kick timing for telemetry review
+    protected long lastKickTotalMs = 0;
+    protected long lastKickExtendMs = 0;
+    protected long lastKickRetractMs = 0;
+
     protected void kickOnce() {
+        long kickStart = System.currentTimeMillis();
+
+        // Phase 1: Extend
+        telemetry.clear();
+        telemetry.addData("KICKER", "EXTENDING...");
+        telemetry.addData("Phase", "1/3 - Extend");
+        telemetry.update();
+
         servo0.setPosition(KICK_EXTEND_POS);
         sleep(KICK_DURATION_MS);
+        long afterExtend = System.currentTimeMillis();
+        lastKickExtendMs = afterExtend - kickStart;
+
+        // Phase 2: Retract command
+        telemetry.clear();
+        telemetry.addData("KICKER", "RETRACTING...");
+        telemetry.addData("Phase", "2/3 - Retract");
+        telemetry.addData("Extend took", "%d ms", lastKickExtendMs);
+        telemetry.update();
+
         servo0.setPosition(KICK_RETRACT_POS);
+
+        // Phase 3: Wait for retract to complete (using KICK_RETRACT_WAIT_MS)
+        sleep(KICK_RETRACT_WAIT_MS);
+        long afterRetract = System.currentTimeMillis();
+        lastKickRetractMs = afterRetract - afterExtend;
+        lastKickTotalMs = afterRetract - kickStart;
+
+        // Show final timing summary briefly
+        telemetry.clear();
+        telemetry.addData("KICKER", "COMPLETE");
+        telemetry.addData("Extend", "%d ms", lastKickExtendMs);
+        telemetry.addData("Retract", "%d ms", lastKickRetractMs);
+        telemetry.addData("TOTAL", "%d ms", lastKickTotalMs);
+        telemetry.update();
     }
 
     protected void ensureKickerRetracted() {
