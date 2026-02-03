@@ -17,6 +17,8 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
     private boolean wasStepShootPressed = false;
     private boolean wasRedToggle = false;
     private boolean wasBlueToggle = false;
+    private boolean wasDpadUp = false;
+    private boolean wasDpadDown = false;
 
     // Drive control
     private float RSX, LSY, LSX;
@@ -135,22 +137,17 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
     }
 
     private void processButtons() {
-        // Servo2 control (shooter angle)
         double now = getRuntime();
-        double dt = clamp(now - lastServo2Time, 0, 0.1);
+        double dt = now - lastServo2Time;
         lastServo2Time = now;
+        dt = Math.max(0, Math.min(0.1, dt));
 
-        // ONLY update servo2 if dpad is pressed (manual control)
-        if (gamepad2.dpadUpWasPressed()) {
+        if (gamepad2.dpad_up) {
             servo2Pos += SERVO2_RATE * dt;
-            servo2Pos = clamp(servo2Pos, SERVO2_MIN, SERVO2_MAX);
-            servo2.setPosition(servo2Pos); // Update immediately
-        } else if (gamepad2.dpadDownWasPressed()) {
+        } else if (gamepad2.dpad_down) {
             servo2Pos -= SERVO2_RATE * dt;
-            servo2Pos = clamp(servo2Pos, SERVO2_MIN, SERVO2_MAX);
-            servo2.setPosition(servo2Pos); // Update immediately
         }
-        // NOTE: Removed "always update" behavior - only updates when dpad pressed
+
 
         // Shooter power adjustment
         if (gamepad2.dpadRightWasPressed()) {
