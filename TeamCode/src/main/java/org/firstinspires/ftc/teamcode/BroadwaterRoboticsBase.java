@@ -57,7 +57,7 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     protected long intakeBottomSeenTime = 0; // mag1
     protected long shootTopSeenTime = 0;     // mag2
     protected long shootBottomSeenTime = 0;  // mag3
-    protected static final long MAGNET_WINDOW_MS = 75; // Detection window for timing tolerance
+    protected static final long MAGNET_WINDOW_MS = 150; // Detection window for timing tolerance
 
     // ==================== CONSTANTS ====================
     // Alignment
