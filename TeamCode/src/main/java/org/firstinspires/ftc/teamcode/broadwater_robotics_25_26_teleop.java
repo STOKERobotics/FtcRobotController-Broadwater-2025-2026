@@ -284,7 +284,9 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
         double mm = (v / 3.3) * 1000.0;
         double inches = mm / 25.4;
 
-        telemetry.addData("distance" , lastTagDistanceIn );
+        double distance = 1;
+
+        telemetry.addData("distance" , distance );
         telemetry.addData("Intake State", intakeState);
         telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
         telemetry.addData("Shoot Slot", getCurrentShootSlot());
