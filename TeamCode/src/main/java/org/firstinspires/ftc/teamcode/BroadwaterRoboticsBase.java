@@ -338,18 +338,22 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     protected int lastKnownIntakeSlot = 0;
     protected int lastKnownShootSlot = 0;
 
+    // Use IMMEDIATE detection only for current slot queries (telemetry, next-slot calc)
+    // This avoids false positives from timing-based robust detection
     protected int getCurrentIntakeSlot() {
-        if (atSlot0()) { lastKnownIntakeSlot = 0; return 0; }
-        if (atSlot1()) { lastKnownIntakeSlot = 1; return 1; }
-        if (atSlot2()) { lastKnownIntakeSlot = 2; return 2; }
-        return lastKnownIntakeSlot; // Return last known instead of -1
+        // Immediate pattern matching only - no timing
+        if (!mag0State && !mag1State) { lastKnownIntakeSlot = 0; return 0; } // Both
+        if (!mag0State && mag1State) { lastKnownIntakeSlot = 1; return 1; }  // Top only
+        if (mag0State && !mag1State) { lastKnownIntakeSlot = 2; return 2; }  // Bottom only
+        return lastKnownIntakeSlot;
     }
 
     protected int getCurrentShootSlot() {
-        if (atShootSlot0()) { lastKnownShootSlot = 0; return 0; }
-        if (atShootSlot1()) { lastKnownShootSlot = 1; return 1; }
-        if (atShootSlot2()) { lastKnownShootSlot = 2; return 2; }
-        return lastKnownShootSlot; // Return last known instead of -1
+        // Immediate pattern matching only - no timing
+        if (mag2State && !mag3State) { lastKnownShootSlot = 0; return 0; }   // Bottom only
+        if (!mag2State && mag3State) { lastKnownShootSlot = 1; return 1; }   // Top only
+        if (!mag2State && !mag3State) { lastKnownShootSlot = 2; return 2; }  // Both
+        return lastKnownShootSlot;
     }
 
     // ==================== COLOR SENSOR ====================
