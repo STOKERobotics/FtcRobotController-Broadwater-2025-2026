@@ -279,43 +279,23 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
         return bottomRecent && mag0State;
     }
 
-    // Shooter slot detectors (use cached states with timing window for robustness)
-    // Shoot Slot 0 = BOTTOM magnet only (divider between slot 0 and 1)
+    // ==================== SHOOTER SLOT DETECTION (SIMPLE) ====================
+    // mag2 = top sensor, mag3 = bottom sensor
+    // magXState = true means NO magnet, false means magnet detected
+
+    // Slot 0: BOTTOM magnet only (top=no magnet, bottom=magnet)
     protected boolean atShootSlot0() {
-        // Immediate detection: bottom detected, top not detected
-        if (mag2State && !mag3State) return true;
-
-        // Robust detection: bottom seen recently, top NOT seen recently
-        // Note: Do NOT use mag2State here - it's true when between slots (no magnets)
-        long now = System.currentTimeMillis();
-        boolean bottomRecent = (now - shootBottomSeenTime) < MAGNET_WINDOW_MS;
-        boolean topNotRecent = (shootTopSeenTime == 0) || (now - shootTopSeenTime) >= MAGNET_WINDOW_MS;
-        return bottomRecent && topNotRecent;
+        return mag2State && !mag3State;
     }
 
-    // Shoot Slot 1 = TOP magnet only (mag2 detected, mag3 not)
+    // Slot 1: TOP magnet only (top=magnet, bottom=no magnet)
     protected boolean atShootSlot1() {
-        // Immediate detection: top detected, bottom not detected
-        if (!mag2State && mag3State) return true;
-
-        // Robust detection: top seen recently, bottom NOT seen recently
-        // Note: Do NOT use mag3State here - it's true when between slots (no magnets)
-        long now = System.currentTimeMillis();
-        boolean topRecent = (now - shootTopSeenTime) < MAGNET_WINDOW_MS;
-        boolean bottomNotRecent = (shootBottomSeenTime == 0) || (now - shootBottomSeenTime) >= MAGNET_WINDOW_MS;
-        return topRecent && bottomNotRecent;
+        return !mag2State && mag3State;
     }
 
-    // Shoot Slot 2 = BOTH magnets (both detected)
+    // Slot 2: BOTH magnets (top=magnet, bottom=magnet)
     protected boolean atShootSlot2() {
-        // Immediate detection: both magnets currently detected
-        if (!mag2State && !mag3State) return true;
-
-        // Robust detection: both magnets seen within timing window
-        long now = System.currentTimeMillis();
-        boolean topRecent = (now - shootTopSeenTime) < MAGNET_WINDOW_MS;
-        boolean bottomRecent = (now - shootBottomSeenTime) < MAGNET_WINDOW_MS;
-        return topRecent && bottomRecent;
+        return !mag2State && !mag3State;
     }
 
     protected boolean atIntakeSlot(int slot) {
@@ -432,39 +412,35 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
         sleep(KICK_RETRACT_WAIT_MS);
     }
 
-    protected void rotateToSlotBlocking(int targetSlot, boolean useShootMagnets) {
+    // ==================== SHOOTER ROTATION (SIMPLE) ====================
+    // Rotate to a specific shooter slot by number (0, 1, or 2)
+    protected void rotateToShootSlot(int targetSlot) {
         shootingBusy = true;
         try {
             ensureKickerRetracted();
 
-            // Reset magnet timing to avoid false positives from previous detections
-            resetMagnetTiming();
+            // Fresh sensor read
+            updateMagnetStates();
 
-            // Check if already at target and leave if so
-            updateMagnetStates(); // Fresh read after reset
-            boolean atTarget = useShootMagnets ? atShootSlot(targetSlot) : atIntakeSlot(targetSlot);
-            if (atTarget) {
-                long leaveStart = System.currentTimeMillis();
+            // If already at target, move off first
+            if (atShootSlot(targetSlot)) {
                 servo1.setPower(MGR_CRAWL_POWER);
+                long leaveStart = System.currentTimeMillis();
                 while (opModeIsActive() && (System.currentTimeMillis() - leaveStart) < 400) {
                     updateMagnetStates();
-                    atTarget = useShootMagnets ? atShootSlot(targetSlot) : atIntakeSlot(targetSlot);
-                    if (!atTarget) break;
+                    if (!atShootSlot(targetSlot)) break;
                 }
                 servo1.setPower(0);
-                // Reset timing again after leaving the current position
-                resetMagnetTiming();
             }
 
-            // Rotate to target
-            long start = System.currentTimeMillis();
+            // Spin until we hit the target slot
             servo1.setPower(MGR_FAST_POWER);
+            long start = System.currentTimeMillis();
 
             while (opModeIsActive() && (System.currentTimeMillis() - start) < MGR_MOVE_TIMEOUT_MS) {
                 updateMagnetStates();
-                atTarget = useShootMagnets ? atShootSlot(targetSlot) : atIntakeSlot(targetSlot);
-                if (atTarget) {
-                    servo1.setPower(0); // INSTANT STOP
+                if (atShootSlot(targetSlot)) {
+                    servo1.setPower(0);
                     break;
                 }
             }
@@ -472,6 +448,59 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
             servo1.setPower(0);
 
             // Brake
+            if (MGR_BRAKE_MS > 0) {
+                servo1.setPower(MGR_BRAKE_POWER);
+                sleep(MGR_BRAKE_MS);
+                servo1.setPower(0);
+            }
+
+        } finally {
+            servo1.setPower(0);
+            shootingBusy = false;
+        }
+    }
+
+    // Keep intake rotation separate (uses timing-based detection which works)
+    protected void rotateToSlotBlocking(int targetSlot, boolean useShootMagnets) {
+        if (useShootMagnets) {
+            rotateToShootSlot(targetSlot);
+            return;
+        }
+
+        // Intake rotation (unchanged - this works)
+        shootingBusy = true;
+        try {
+            ensureKickerRetracted();
+            resetMagnetTiming();
+
+            updateMagnetStates();
+            boolean atTarget = atIntakeSlot(targetSlot);
+            if (atTarget) {
+                long leaveStart = System.currentTimeMillis();
+                servo1.setPower(MGR_CRAWL_POWER);
+                while (opModeIsActive() && (System.currentTimeMillis() - leaveStart) < 400) {
+                    updateMagnetStates();
+                    atTarget = atIntakeSlot(targetSlot);
+                    if (!atTarget) break;
+                }
+                servo1.setPower(0);
+                resetMagnetTiming();
+            }
+
+            long start = System.currentTimeMillis();
+            servo1.setPower(MGR_FAST_POWER);
+
+            while (opModeIsActive() && (System.currentTimeMillis() - start) < MGR_MOVE_TIMEOUT_MS) {
+                updateMagnetStates();
+                atTarget = atIntakeSlot(targetSlot);
+                if (atTarget) {
+                    servo1.setPower(0);
+                    break;
+                }
+            }
+
+            servo1.setPower(0);
+
             if (atTarget && MGR_BRAKE_MS > 0) {
                 servo1.setPower(MGR_BRAKE_POWER);
                 sleep(MGR_BRAKE_MS);
