@@ -285,11 +285,12 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
         // Immediate detection: bottom detected, top not detected
         if (mag2State && !mag3State) return true;
 
-        // Robust detection: bottom seen recently, top either not detected or not recent
+        // Robust detection: bottom seen recently, top NOT seen recently
+        // Note: Do NOT use mag2State here - it's true when between slots (no magnets)
         long now = System.currentTimeMillis();
         boolean bottomRecent = (now - shootBottomSeenTime) < MAGNET_WINDOW_MS;
-        boolean topClear = mag2State || (shootTopSeenTime == 0) || (now - shootTopSeenTime) >= MAGNET_WINDOW_MS;
-        return bottomRecent && topClear;
+        boolean topNotRecent = (shootTopSeenTime == 0) || (now - shootTopSeenTime) >= MAGNET_WINDOW_MS;
+        return bottomRecent && topNotRecent;
     }
 
     // Shoot Slot 1 = TOP magnet only (mag2 detected, mag3 not)
@@ -297,11 +298,12 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
         // Immediate detection: top detected, bottom not detected
         if (!mag2State && mag3State) return true;
 
-        // Robust detection: top seen recently, bottom either not detected or not recent
+        // Robust detection: top seen recently, bottom NOT seen recently
+        // Note: Do NOT use mag3State here - it's true when between slots (no magnets)
         long now = System.currentTimeMillis();
         boolean topRecent = (now - shootTopSeenTime) < MAGNET_WINDOW_MS;
-        boolean bottomClear = mag3State || (shootBottomSeenTime == 0) || (now - shootBottomSeenTime) >= MAGNET_WINDOW_MS;
-        return topRecent && bottomClear;
+        boolean bottomNotRecent = (shootBottomSeenTime == 0) || (now - shootBottomSeenTime) >= MAGNET_WINDOW_MS;
+        return topRecent && bottomNotRecent;
     }
 
     // Shoot Slot 2 = BOTH magnets (both detected)
@@ -351,8 +353,8 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     protected int getCurrentShootSlot() {
         // Immediate pattern matching only - no timing
         if (mag2State && !mag3State) { lastKnownShootSlot = 0; return 0; }   // Bottom only
-        if (!mag2State && mag3State) { lastKnownShootSlot = 1; return 1; }   // Top only
-        if (!mag2State && !mag3State) { lastKnownShootSlot = 2; return 2; }  // Both
+        else if (!mag2State && mag3State) { lastKnownShootSlot = 1; return 1; }   // Top only
+        else if (!mag2State && !mag3State) { lastKnownShootSlot = 2; return 2; }  // Both
         return lastKnownShootSlot;
     }
 
