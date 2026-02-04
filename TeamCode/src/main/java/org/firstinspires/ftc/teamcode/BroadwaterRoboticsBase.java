@@ -280,29 +280,31 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     }
 
     // Shooter slot detectors (use cached states with timing window for robustness)
-    // Shoot Slot 0 = TOP magnet only (divider between slot 0 and 1)
+    // Shoot Slot 0 = BOTTOM magnet only (divider between slot 0 and 1)
     protected boolean atShootSlot0() {
-        // Immediate detection: top detected, bottom not detected
-        if (!mag2State && mag3State) return true;
-
-        // Robust detection: top seen recently, bottom NOT currently detected
-        long now = System.currentTimeMillis();
-        boolean topRecent = (now - shootTopSeenTime) < MAGNET_WINDOW_MS;
-        return topRecent && mag3State;
-    }
-
-    // Shoot Slot 1 = BOTTOM magnet only (divider between slot 1 and 2)
-    protected boolean atShootSlot1() {
         // Immediate detection: bottom detected, top not detected
         if (mag2State && !mag3State) return true;
 
-        // Robust detection: bottom seen recently, top NOT currently detected
+        // Robust detection: bottom seen recently, top either not detected or not recent
         long now = System.currentTimeMillis();
         boolean bottomRecent = (now - shootBottomSeenTime) < MAGNET_WINDOW_MS;
-        return bottomRecent && mag2State;
+        boolean topClear = mag2State || (shootTopSeenTime == 0) || (now - shootTopSeenTime) >= MAGNET_WINDOW_MS;
+        return bottomRecent && topClear;
     }
 
-    // Shoot Slot 2 = BOTH magnets (divider to right of slot 0)
+    // Shoot Slot 1 = TOP magnet only (mag2 detected, mag3 not)
+    protected boolean atShootSlot1() {
+        // Immediate detection: top detected, bottom not detected
+        if (!mag2State && mag3State) return true;
+
+        // Robust detection: top seen recently, bottom either not detected or not recent
+        long now = System.currentTimeMillis();
+        boolean topRecent = (now - shootTopSeenTime) < MAGNET_WINDOW_MS;
+        boolean bottomClear = mag3State || (shootBottomSeenTime == 0) || (now - shootBottomSeenTime) >= MAGNET_WINDOW_MS;
+        return topRecent && bottomClear;
+    }
+
+    // Shoot Slot 2 = BOTH magnets (both detected)
     protected boolean atShootSlot2() {
         // Immediate detection: both magnets currently detected
         if (!mag2State && !mag3State) return true;
@@ -332,18 +334,22 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
         }
     }
 
+    // Last known slots - never returns -1, holds previous value
+    protected int lastKnownIntakeSlot = 0;
+    protected int lastKnownShootSlot = 0;
+
     protected int getCurrentIntakeSlot() {
-        if (atSlot0()) return 0;
-        if (atSlot1()) return 1;
-        if (atSlot2()) return 2;
-        return -1;
+        if (atSlot0()) { lastKnownIntakeSlot = 0; return 0; }
+        if (atSlot1()) { lastKnownIntakeSlot = 1; return 1; }
+        if (atSlot2()) { lastKnownIntakeSlot = 2; return 2; }
+        return lastKnownIntakeSlot; // Return last known instead of -1
     }
 
     protected int getCurrentShootSlot() {
-        if (atShootSlot0()) return 0;
-        if (atShootSlot1()) return 1;
-        if (atShootSlot2()) return 2;
-        return -1;
+        if (atShootSlot0()) { lastKnownShootSlot = 0; return 0; }
+        if (atShootSlot1()) { lastKnownShootSlot = 1; return 1; }
+        if (atShootSlot2()) { lastKnownShootSlot = 2; return 2; }
+        return lastKnownShootSlot; // Return last known instead of -1
     }
 
     // ==================== COLOR SENSOR ====================
