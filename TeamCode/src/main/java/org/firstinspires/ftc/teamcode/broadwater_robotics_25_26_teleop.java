@@ -142,12 +142,10 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
 
         // ONLY update servo2 if dpad is pressed (manual control)
         if (gamepad2.dpadUpWasPressed()) {
-            servo2Pos += SERVO2_RATE * dt;
-            servo2Pos = clamp(servo2Pos, SERVO2_MIN, SERVO2_MAX);
+            servo2Pos += 0.05;
             servo2.setPosition(servo2Pos); // Update immediately
         } else if (gamepad2.dpadDownWasPressed()) {
-            servo2Pos -= SERVO2_RATE * dt;
-            servo2Pos = clamp(servo2Pos, SERVO2_MIN, SERVO2_MAX);
+            servo2Pos -= 0.05;
             servo2.setPosition(servo2Pos); // Update immediately
         }
         // NOTE: Removed "always update" behavior - only updates when dpad pressed
@@ -286,6 +284,7 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
         double mm = (v / 3.3) * 1000.0;
         double inches = mm / 25.4;
 
+        telemetry.addData("distance" , lastTagDistanceIn );
         telemetry.addData("Intake State", intakeState);
         telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
         telemetry.addData("Shoot Slot", getCurrentShootSlot());
@@ -293,13 +292,14 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
         telemetry.addData("Motif", "%s (Tag %d) %s",
                 latchedMotif, latchedTagId, motifListenEnabled ? "LISTEN" : "");
         telemetry.addData("Shooter Pos", "%.3f", servo2.getPosition());
-        telemetry.addData("Shooter Power", "%.2f / %.2f", motor0b.getPower(), motor1b.getPower());
+        telemetry.addData("Shooter Power", "%.2f", motor1b.getPower());
         // telemetry.addData("imu", imu2.getAngularOrientation());
 
         // Last kick timing (only show if a kick has occurred)
         if (lastKickTotalMs > 0) {
             telemetry.addData("Last Kick", "ext=%dms ret=%dms TOTAL=%dms",
                     lastKickExtendMs, lastKickRetractMs, lastKickTotalMs);
+        telemetry.update();
         }
     }
 }

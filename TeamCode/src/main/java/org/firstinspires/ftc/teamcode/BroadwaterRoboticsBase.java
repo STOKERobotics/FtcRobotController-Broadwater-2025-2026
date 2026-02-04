@@ -77,7 +77,7 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     protected static final long KICK_RETRACT_WAIT_MS = 500;
 
     // Merry-go-round servo
-    protected static final double MGR_FAST_POWER = 0.8;
+    protected static final double MGR_FAST_POWER = 1;
     protected static final double MGR_CRAWL_POWER = 0.08;
     protected static final long MGR_BRAKE_MS = 100;
     protected static final double MGR_BRAKE_POWER = -0.60;
