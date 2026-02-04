@@ -18,6 +18,13 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
     private boolean wasRedToggle = false;
     private boolean wasBlueToggle = false;
 
+    private boolean fieldCentric = false;
+    private boolean wasToggleFC = false;
+    private double fcZeroYawDeg = 0.0;
+    private long lastShootAdvanceMs = 0;
+    private static final long SHOOT_ADV_COOLDOWN_MS = 2000;
+
+
     // Drive control
     private float RSX, LSY, LSX;
     private double strafePower, drivePower, rotatePower;
@@ -41,6 +48,7 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
             while (opModeIsActive()) {
                 // OPTIMIZATION: Single magnet read per loop cycle
                 updateMagnetStates();
+                updateArmAngle();
 
                 // Process game logic
                 processAlignment();
@@ -48,6 +56,7 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
                 processIntake();
                 processControls();
                 processLights();
+                updateArmAngle();
 
                 // Telemetry
                 updateTelemetry();
@@ -102,16 +111,25 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
     }
 
     private void handleManualStep() {
-        int from = getCurrentIntakeSlot();
-        if (from < 0) from = currentSlot;
-        int to = (from + INTAKE_SLOT_STEP + 3) % 3;
+        stopDrive();
 
-        rotateToSlotBlocking(to, false);
+        int found = spinToNextIntakeSlotAndStopFastCapture(MGR_FAST_POWER, MGR_CRAWL_POWER);
 
-        currentSlot = to;
-        intakeState = waitStateForSlot(to);
-        colorLatched = false;
+
+        if (found != -1) {
+            currentSlot = found;
+            intakeState = waitStateForSlot(found);
+            colorLatched = false;
+
+            // settle + prevent “recapture”
+            servo1.setPower(0);
+            sleep(180);
+            resetMagnetTiming();   // this clears BOTH intake+shoot timers (fine)
+            updateMagnetStates();
+        }
     }
+
+
 
     private void processControls() {
         if (alignActive) {
@@ -128,7 +146,22 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
         rotatePower = gain * LSX;
         strafePower = gain * RSX;
 
-        driveRobotCentric(drivePower, strafePower, rotatePower);
+        if (fieldCentric) {
+            // Use yaw relative to your chosen "field forward"
+            double headingDeg = angleWrapDeg(getYawDeg() - fcZeroYawDeg);
+            double headingRad = Math.toRadians(headingDeg);
+
+            double cosA = Math.cos(-headingRad);
+            double sinA = Math.sin(-headingRad);
+
+            double yRobot = drivePower * cosA - strafePower * sinA;
+            double xRobot = drivePower * sinA + strafePower * cosA;
+
+            driveRobotCentric(yRobot, xRobot, rotatePower);
+        } else {
+            driveRobotCentric(drivePower, strafePower, rotatePower);
+        }
+
 
         // Button controls
         processButtons();
@@ -171,6 +204,17 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
                 latchedTagId = -1;
             }
         }
+        // Toggle field-centric on/off
+        if (gamepad1.y && !wasToggleFC) {
+            fieldCentric = !fieldCentric;
+        }
+        wasToggleFC = gamepad1.y;
+
+        // Re-zero heading for field-centric (face forward then press)
+        if (gamepad1.x) {
+            fcZeroYawDeg = getYawDeg();
+        }
+
         wasMotifListenTogglePressed = gamepad2.x;
 
         // Manual kick
@@ -181,10 +225,12 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
         }
         wasKickTrigger = kickTrigger;
 
-        // Shoot tray advance
         if (gamepad2.right_bumper && !wasShootAdvancePressed) {
-            stopDrive();
-            stepShootTrayOneSlotNoKick();
+            long nowMs = System.currentTimeMillis();
+            if (nowMs - lastShootAdvanceMs >= SHOOT_ADV_COOLDOWN_MS) {
+                lastShootAdvanceMs = nowMs;
+                stepShootTrayOneSlotWithKick(); // or your no-kick version
+            }
         }
         wasShootAdvancePressed = gamepad2.right_bumper;
 
@@ -195,20 +241,32 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
         wasStepShootPressed = gamepad2.y;
     }
 
-    private void stepShootTrayOneSlotNoKick() {
-        if (shootingBusy) {
-            telemetry.addData("BLOCKED", "Shooting busy - wait for current action to finish");
-            telemetry.update();
-            return;
-        }
+
+
+    private void stepShootTrayOneSlotWithKick() {
+        if (shootingBusy) return;
+
+        stopDrive();
         ensureKickerRetracted();
 
-        int current = getCurrentShootSlot();
-        if (current < 0) current = 0;
-        int next = (current + SHOOT_SLOT_STEP + 3) % 3;
+        int found = spinToNextShootSlotAndStopFastCapture(MGR_FAST_POWER, MGR_CRAWL_POWER);
+        //int found = spinToNextShootSlotAndStopFastOnly(MGR_FAST_POWER);
 
-        rotateToSlotBlocking(next, true);
+        if (found != -1) {
+            // Optional: tiny settle so you don't bounce off the magnet edge
+            sleep(80);
+
+            // Shoot!
+            kickOnce();
+
+            telemetry.addData("Manual Step+Shoot", "shot at slot=%d patt=%s",
+                    found, (mag2State ? "1":"0") + (mag3State ? "1":"0"));
+        } else {
+            telemetry.addData("Manual Step+Shoot", "FAILED patt=%s",
+                    (mag2State ? "1":"0") + (mag3State ? "1":"0"));
+        }
     }
+
 
     private void stepToNextSlotAndShoot() {
         if (shootingBusy) {
@@ -261,6 +319,13 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
         stepShotIndex = 0;
         stepModeActive = true;
     }
+    protected double armAngleFiltered = 0.0;
+
+    protected double getArmAngleDegFiltered() {
+        double a = getArmAngleDeg();
+        armAngleFiltered = 0.85 * armAngleFiltered + 0.15 * a;
+        return armAngleFiltered;
+    }
 
     private void processLights() {
         // Toggle RED
@@ -277,31 +342,135 @@ public class broadwater_robotics_25_26_teleop    extends BroadwaterRoboticsBase 
         }
         wasBlueToggle = gamepad2.share;
     }
+    private double getFieldHeadingDeg() {
+        return angleWrapDeg(getYawDeg() - fcZeroYawDeg);
+    }
 
     private void updateTelemetry() {
-        // Laser distance
+        long now = System.currentTimeMillis();
+        if (now - lastTelemMs < TELEM_PERIOD_MS) {
+            return;  // ← nothing happens
+        }
+
+        telemetry.clearAll();
+
         double v = laser.getVoltage();
         double mm = (v / 3.3) * 1000.0;
         double inches = mm / 25.4;
 
-        double distance = 1;
-
-        telemetry.addData("distance" , distance );
         telemetry.addData("Intake State", intakeState);
         telemetry.addData("Slots", "0=%s 1=%s 2=%s", slots[0], slots[1], slots[2]);
+        //telemetry.addData("Shoot mags raw", "mag2=%s mag3=%s", mag2State ? "1" : "0", mag3State ? "1" : "0");
         telemetry.addData("Shoot Slot", getCurrentShootSlot());
-        telemetry.addData("Laser Dist", "%.0f mm (%.1f in)", mm, inches);
+        //telemetry.addData("Laser Dist", "%.0f mm (%.1f in)", mm, inches);
+        telemetry.addData("imu1 yaw", "%.1f", getYawDeg());
+        telemetry.addData("imu2 pitch", "%.1f", getImu2PitchDeg());
+        telemetry.addData("Arm Angle", "%.1f", getArmAngleDeg());
+        telemetry.addData("ShootRotate", "%s", lastShootRotateStatus);
+        telemetry.addData("Drive Mode", fieldCentric ? "FIELD" : "ROBOT");
+
+
         telemetry.addData("Motif", "%s (Tag %d) %s",
                 latchedMotif, latchedTagId, motifListenEnabled ? "LISTEN" : "");
+
         telemetry.addData("Shooter Pos", "%.3f", servo2.getPosition());
         telemetry.addData("Shooter Power", "%.2f", motor1b.getPower());
-        // telemetry.addData("imu", imu2.getAngularOrientation());
+        telemetry.addData("Intake mags", "mag0/mag1=%s", intakePattern());
+        telemetry.addData("Intake Slot", "%d", classifyIntakeSlotImmediate());
+        telemetry.addData("Intake Slot(last)", "%d", getCurrentIntakeSlot()); // your latched value
 
-        // Last kick timing (only show if a kick has occurred)
+
         if (lastKickTotalMs > 0) {
             telemetry.addData("Last Kick", "ext=%dms ret=%dms TOTAL=%dms",
                     lastKickExtendMs, lastKickRetractMs, lastKickTotalMs);
-        telemetry.update();
+        }
+
+        // DO NOT telemetry.update() here; you already throttle it in the main loop
+    }
+    protected int spinToNextShootSlotAndStopFastCapture(double fastPower, double crawlPower) {
+        shootingBusy = true;
+        try {
+            ensureKickerRetracted();
+            updateMagnetStates();
+
+            final long TIMEOUT_MS   = 0;
+            final long STABLE_MS    = 70;
+            final long CRAWL_MAX_MS = 0;
+
+            long deadline = System.currentTimeMillis() + TIMEOUT_MS;
+
+            int startSlot = classifyShootSlotImmediate();
+
+            // KEY IDEA:
+            // Only allow a "new slot" capture AFTER we've seen "between" (11).
+            boolean seenBetween = !isShootSlotPattern(); // if we start in 11, we're already good.
+
+            // 1) LEAVE current slot until we see between (11)
+            if (!seenBetween) {
+                servo1.setPower(fastPower);
+                long leaveDeadline = Math.min(deadline, System.currentTimeMillis() + 600);
+                while (opModeIsActive() && System.currentTimeMillis() < leaveDeadline) {
+                    updateMagnetStates();
+                    if (!isShootSlotPattern()) { // 11
+                        seenBetween = true;
+                        break;
+                    }
+                }
+            }
+
+            // 2) FAST SEARCH until we hit any slot pattern (10/01/00) AFTER we've seenBetween
+            servo1.setPower(fastPower);
+            while (opModeIsActive() && System.currentTimeMillis() < deadline) {
+                updateMagnetStates();
+                if (seenBetween && isShootSlotPattern()) break;
+                telemetryUpdateThrottled();
+            }
+
+            // 3) CRAWL + STABLE HOLD to land precisely on the *next* slot (not the startSlot)
+            servo1.setPower(crawlPower);
+            long crawlDeadline = Math.min(deadline, System.currentTimeMillis() + CRAWL_MAX_MS);
+
+            int found = -1;
+            while (opModeIsActive() && System.currentTimeMillis() < crawlDeadline) {
+                updateMagnetStates();
+
+                int s = classifyShootSlotImmediate();
+                boolean candidate = (s != -1) && seenBetween && (startSlot == -1 || s != startSlot);
+
+                if (candidate) {
+                    long holdStart = System.currentTimeMillis();
+                    boolean ok = true;
+
+                    while (opModeIsActive() && System.currentTimeMillis() < crawlDeadline) {
+                        updateMagnetStates();
+                        if (classifyShootSlotImmediate() != s) { ok = false; break; }
+                        if (System.currentTimeMillis() - holdStart >= STABLE_MS) break;
+                    }
+
+                    if (ok && classifyShootSlotImmediate() == s) {
+                        found = s;
+                        break;
+                    }
+                }
+
+                telemetryUpdateThrottled();
+            }
+
+            servo1.setPower(0);
+
+            if (found == -1) {
+                setShootRotateStatus("SHOOT FASTCAP FAIL start=" + startSlot + " patt=" + shootPattern());
+            } else {
+                setShootRotateStatus("SHOOT FASTCAP -> " + found + " patt=" + shootPattern());
+            }
+
+            return found;
+
+        } finally {
+            servo1.setPower(0);
+            shootingBusy = false;
         }
     }
+
+
 }
