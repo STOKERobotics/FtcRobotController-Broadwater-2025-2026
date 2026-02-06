@@ -17,17 +17,18 @@ public class broadwater_robotics_25_26_auto_RED extends BroadwaterRoboticsBase {
 
     @Override
     public void runOpMode() {
-        initializeHardware();
 
         telemetry.addData(">", "Touch START to start OpMode");
         telemetry.update();
 
         waitForStart();
 
+        initializeHardware();
+
         if (opModeIsActive()) {
             // Start motors
-            motor0b.setPower(0.6);
-            motor1b.setPower(0.6);
+            //motor0b.setPower(0.6);
+            motor1b.setPower(0.65);
             motor2b.setPower(1.0);
 
             // Enable motif listener
@@ -43,12 +44,12 @@ public class broadwater_robotics_25_26_auto_RED extends BroadwaterRoboticsBase {
         // Example autonomous sequence - customize as needed
 
         // 1. Drive forward to scoring position
-        driveForwardMeters(1.0, 0.5);
-        sleep(500);
+        driveForwardMeters(-.1, 1);
+        sleep(100);
 
         // 2. Turn to face target
-        turnDegrees(45, 0.3);
-        sleep(500);
+        turnDegrees(-20, 1);
+        sleep(20);
 
         // 3. Align to AprilTag
         motifListenEnabled = true;
@@ -66,7 +67,7 @@ public class broadwater_robotics_25_26_auto_RED extends BroadwaterRoboticsBase {
 
             // Align to target
             boolean aligned = alignToTarget();
-            if (aligned && motifLatched) {
+            if (aligned) {
                 align = false;
                 shoot = true;
             }
@@ -76,8 +77,12 @@ public class broadwater_robotics_25_26_auto_RED extends BroadwaterRoboticsBase {
         }
 
         // 4. Shoot if aligned
-        if (shoot && motifLatched) {
-            adjustShooterAndFire();
+        if (shoot) {
+            // optional: set shooter angle before shooting
+            servo2.setPosition(servo2Pos);
+
+            // This will rotate + kick 3 times using mag2/mag3 capture
+            shootNextThreeSlotsManual();
         }
 
         // 5. Park

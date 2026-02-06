@@ -74,8 +74,8 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     // Shooter
     protected static final double KICK_EXTEND_POS = 0.0;
     protected static final double KICK_RETRACT_POS = 1.0;
-    protected static final long KICK_DURATION_MS = 300;   // extend time
-    protected static final long KICK_RETRACT_WAIT_MS = 200; // retract settle
+    protected static final long KICK_DURATION_MS = 400;   // extend time
+    protected static final long KICK_RETRACT_WAIT_MS = 250; // retract settle
 
     // Merry-go-round servo
     protected static final double MGR_FAST_POWER = .75;
@@ -87,6 +87,7 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     protected static final int INTAKE_TO_SHOOT_OFFSET = 0;
     protected String lastShootRotateStatus = "none";
     protected long lastShootRotateStatusMs = 0;
+
 
 
     // Color sensor thresholds
@@ -146,6 +147,12 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
     protected static final long SHOOT_STABLE_MS = 120;      // must hold pattern this long
     protected static final long SHOOT_MIN_SPIN_MS = 250;    // ignore early false hits
     protected static final long SHOOT_LEAVE_MS = 250;       // move off if starting on target
+    protected static final double FAR_SHOT_M = 2.0;
+    protected static final double FAR_SHOT_IN = FAR_SHOT_M / IN_TO_M; // ≈118.1 in
+
+    protected static final double SHOOTER_POWER_FAR  = 0.76;
+    protected static final double SHOOTER_POWER_NEAR = 0.65;
+
 
     // ==================== INITIALIZATION ====================
     protected void initializeHardware() {
@@ -594,7 +601,7 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
                 servo1.setPower(0);
                 if (newColorEvent) {
                     slots[0] = ballColorValue;
-                    intakeState = INTAKEState.MOVE_TO_SLOT1;
+                    advanceIntakeAfterColorLatch(0);   // <<< auto-advance
                 }
                 break;
 
@@ -618,7 +625,7 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
                 servo1.setPower(0);
                 if (newColorEvent) {
                     slots[1] = ballColorValue;
-                    intakeState = INTAKEState.MOVE_TO_SLOT2;
+                    advanceIntakeAfterColorLatch(1);
                 }
                 break;
 
@@ -638,13 +645,15 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
                 }
                 break;
 
+
             case WAIT_COLOR_2:
                 servo1.setPower(0);
                 if (newColorEvent) {
                     slots[2] = ballColorValue;
-                    intakeState = INTAKEState.DONE;
+                    advanceIntakeAfterColorLatch(2);   // will mark DONE
                 }
                 break;
+
 
             case DONE:
                 servo1.setPower(0);
@@ -657,6 +666,16 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
         LLResult result = limelight.getLatestResult();
         double distTag = getBestTagDistanceInches(result);
         lastTagDistanceIn = distTag; // keep your existing variable updated
+
+        if (distTag > 0) { // valid reading
+            if (distTag > FAR_SHOT_IN) {
+                motor1b.setPower(SHOOTER_POWER_FAR);
+            } else {
+                motor1b.setPower(SHOOTER_POWER_NEAR);
+            }
+        }
+        telemetry.addData("Shooter Auto", "dist=%.1f in power=%.2f",
+                distTag, motor1b.getPower());
 
         telemetry.addData("distTag (in)", "%.1f", distTag);
 
@@ -1424,6 +1443,208 @@ public abstract class BroadwaterRoboticsBase extends LinearOpMode {
             shootingBusy = false;
         }
     }
+
+    // After stopping on a slot, nudge forward until we are BETWEEN (no magnet pattern).
+    // This prevents the next press from re-detecting the same slot.
+    protected void nudgeOffIntakeSlotToBetween(long maxMs, double power) {
+        long start = System.currentTimeMillis();
+        servo1.setPower(power);
+
+        while (opModeIsActive() && (System.currentTimeMillis() - start) < maxMs) {
+            updateMagnetStates();
+
+            // "Between" for intake = no magnets (11) on mag0/mag1
+            boolean between = (mag0State && mag1State);
+            if (between) break;
+
+            telemetryUpdateThrottled();
+        }
+
+        servo1.setPower(0);
+        sleep(40);
+        resetMagnetTiming();
+        updateMagnetStates();
+    }
+    // ==================== MANUAL 3-SHOT (SHARED: TELEOP + AUTO) ====================
+    protected void shootNextThreeSlotsManual() {
+        if (shootingBusy) return;
+
+        stopDrive();
+        shootingBusy = true;
+        try {
+            ensureKickerRetracted();
+
+            // BLOCK until aligned (or bail)
+            boolean ok = alignToTargetBlocking(2500);
+            if (!ok) {
+                telemetry.addData("3-SHOT", "Align failed - not shooting");
+                telemetryUpdateThrottled();
+                return;
+            }
+
+            for (int i = 0; i < 3 && opModeIsActive(); i++) {
+                int found = spinToNextShootSlotAndStopFastCapture(MGR_FAST_POWER, MGR_CRAWL_POWER);
+
+                // Optional: re-check alignment between shots (small correction)
+                // alignToTargetBlocking(700);
+
+                kickTwice();
+
+                telemetry.addData("3-SHOT", "step %d fired at shootSlot=%d patt=%s",
+                        i + 1, found, shootPattern());
+                telemetryUpdateThrottled();
+            }
+        } finally {
+            servo1.setPower(0);
+            shootingBusy = false;
+        }
+    }
+
+
+    protected int spinToNextShootSlotAndStopFastCapture(double fastPower, double crawlPower) {
+        shootingBusy = true;
+        try {
+            ensureKickerRetracted();
+            updateMagnetStates();
+
+            final long TIMEOUT_MS = 3500;
+            final long STABLE_MS  = 70;      // shooter needs longer at speed
+            final long LEAVE_MS   = 250;
+            final long CRAWL_MAX_MS = 1200;
+
+            long deadline = System.currentTimeMillis() + TIMEOUT_MS;
+
+            int startSlot = classifyShootSlotImmediate();
+
+            // 1) FAST: leave current slot region if we’re “on a slot”
+            servo1.setPower(fastPower);
+            long leaveDeadline = System.currentTimeMillis() + LEAVE_MS;
+            while (opModeIsActive() && System.currentTimeMillis() < leaveDeadline) {
+                updateMagnetStates();
+                if (!isShootSlotPattern()) break; // now in 11
+            }
+
+            // 2) FAST SEARCH until we see *any* magnet hint (entering a slot)
+            servo1.setPower(fastPower);
+            while (opModeIsActive() && System.currentTimeMillis() < deadline) {
+                updateMagnetStates();
+                if (isShootSlotPattern()) break; // saw 10/01/00
+                telemetryUpdateThrottled();
+            }
+
+            // 3) CRAWL + STABLE HOLD to land precisely
+            servo1.setPower(crawlPower);
+            long crawlDeadline = Math.min(deadline, System.currentTimeMillis() + CRAWL_MAX_MS);
+
+            int found = -1;
+            while (opModeIsActive() && System.currentTimeMillis() < crawlDeadline) {
+                updateMagnetStates();
+
+                int s = classifyShootSlotImmediate();
+                boolean candidate = (s != -1) && (startSlot == -1 || s != startSlot);
+
+                if (candidate) {
+                    long holdStart = System.currentTimeMillis();
+                    boolean ok = true;
+
+                    while (opModeIsActive() && System.currentTimeMillis() < crawlDeadline) {
+                        updateMagnetStates();
+                        if (classifyShootSlotImmediate() != s) { ok = false; break; }
+                        if (System.currentTimeMillis() - holdStart >= STABLE_MS) break;
+                    }
+
+                    if (ok && classifyShootSlotImmediate() == s) {
+                        found = s;
+                        break;
+                    }
+                }
+
+                telemetryUpdateThrottled();
+            }
+
+            servo1.setPower(0);
+
+            if (found == -1) {
+                setShootRotateStatus("SHOOT FASTCAP FAIL start=" + startSlot + " patt=" + shootPattern());
+            } else {
+                setShootRotateStatus("SHOOT FASTCAP -> " + found + " patt=" + shootPattern());
+            }
+
+            return found;
+
+        } finally {
+            servo1.setPower(0);
+            shootingBusy = false;
+        }
+    }
+    protected void advanceIntakeAfterColorLatch(int slotJustFilled) {
+        // If slot 2 just filled, we're done
+        if (slotJustFilled >= 2) {
+            intakeState = INTAKEState.DONE;
+            servo1.setPower(0);
+            return;
+        }
+
+        int target = slotJustFilled + 1;
+
+        // Rotate to the *explicit* next slot using your working intake rotation logic
+        rotateToSlotBlocking(target, false); // false = use intake magnets (mag0/mag1)
+
+        // After rotation, sync state for next slot
+        currentSlot = target;
+        intakeState = waitStateForSlot(target);
+        colorLatched = false;
+        mgrRetractDone = false;
+
+        // Clear timing windows so we don't “double-detect”
+        resetMagnetTiming();
+        updateMagnetStates();
+    }// Blocks until aligned (or timeout). Returns true if aligned.
+    protected boolean alignToTargetBlocking(long timeoutMs) {
+        long start = System.currentTimeMillis();
+        long alignedSince = 0;
+
+        while (opModeIsActive() && (System.currentTimeMillis() - start) < timeoutMs) {
+            boolean aligned = alignToTarget(); // this applies turning power OR stops drive
+
+            if (aligned) {
+                if (alignedSince == 0) alignedSince = System.currentTimeMillis();
+                if (System.currentTimeMillis() - alignedSince >= ALIGN_STABLE_MS) {
+                    stopDrive();
+                    return true;
+                }
+            } else {
+                alignedSince = 0;
+            }
+
+            telemetry.addData("AlignBlocking", "aligned=%s t=%d/%d",
+                    aligned, (System.currentTimeMillis() - start), timeoutMs);
+            telemetryUpdateThrottled();
+        }
+
+        stopDrive();
+        setShootRotateStatus("ALIGN FAIL/timeout");
+        return false;
+    }
+
+    // Fires TWO kicks with a short gap.
+// Use this in auto if you want extra assurance a ball clears.
+    protected void kickTwice() {
+        if (!opModeIsActive()) return;
+
+        // Make sure we start retracted
+        ensureKickerRetracted();
+
+        // First kick
+        kickOnce();
+
+        // Small settle so the ball can move / tray can stop bouncing
+        sleep(120);
+
+        // Second kick
+        kickOnce();
+    }
+
 
 
 
